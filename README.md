@@ -101,6 +101,14 @@ If the endpoint does rate limit you, the panel shows a live countdown and the ap
 until the penalty expires — including across restarts, so quitting and reopening won't
 re-trip it.
 
+### Model colours
+
+Each model family has a fixed colour so the chart reads the same every launch:
+Fable orange, Opus blue, Sonnet green, Mythos purple, Haiku pink, anything else grey.
+They're pinned in `ModelPalette` rather than left to Swift Charts, which assigns colours
+by category position — that would repaint Opus a different colour on any week where
+Fable happened not to appear.
+
 ## Caveats
 
 **The usage endpoint is not a public, documented API.** It is the internal endpoint

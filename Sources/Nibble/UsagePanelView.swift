@@ -191,17 +191,17 @@ struct WeekChart: View {
         history
             .map { key, counts in
                 Bar(day: String(key.day.suffix(5)),
-                    model: Self.shortModel(key.model),
+                    model: ModelPalette.family(for: key.model),
                     tokens: counts.total)
             }
             .sorted { $0.day < $1.day }
     }
 
-    static func shortModel(_ id: String) -> String {
-        for name in ["fable", "mythos", "opus", "sonnet", "haiku"] where id.contains(name) {
-            return name
-        }
-        return "other"
+    /// Only the families on screen, in canonical order — colours come from the
+    /// fixed palette, never from the chart's positional defaults.
+    var scale: (domain: [String], range: [Color]) {
+        let domain = ModelPalette.presentFamilies(in: history.keys.map(\.model))
+        return (domain, domain.map { Color(hex: ModelPalette.hex(for: $0)) })
     }
 
     var body: some View {
@@ -216,6 +216,7 @@ struct WeekChart: View {
                         y: .value("Tokens", bar.tokens))
                     .foregroundStyle(by: .value("Model", bar.model))
             }
+            .chartForegroundStyleScale(domain: scale.domain, range: scale.range)
             .chartYAxis {
                 AxisMarks { value in
                     AxisGridLine()
@@ -229,6 +230,19 @@ struct WeekChart: View {
             .chartLegend(position: .bottom, spacing: 4)
             .frame(height: 120)
         }
+    }
+}
+
+extension Color {
+    /// Builds a colour from a 6-digit RGB hex, as stored in `ModelPalette`.
+    init(hex: String) {
+        var value: UInt64 = 0
+        Scanner(string: hex).scanHexInt64(&value)
+        self.init(
+            .sRGB,
+            red: Double((value >> 16) & 0xFF) / 255,
+            green: Double((value >> 8) & 0xFF) / 255,
+            blue: Double(value & 0xFF) / 255)
     }
 }
 

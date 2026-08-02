@@ -1,7 +1,7 @@
 import SwiftUI
 import Charts
 import ServiceManagement
-import UsageBarCore
+import NibbleCore
 
 struct UsagePanelView: View {
     @ObservedObject var state: AppState
@@ -27,9 +27,9 @@ struct SetupView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Connect UsageBar").font(.headline)
+            Text("Connect Nibble").font(.headline)
 
-            Text("UsageBar reads the Claude login already stored on this Mac by Claude Code. macOS will ask you to approve — nothing is read until you do.")
+            Text("Nibble reads the Claude login already stored on this Mac by Claude Code. macOS will ask you to approve — nothing is read until you do.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -130,7 +130,7 @@ struct DashboardView: View {
                 Spacer()
                 Menu {
                     Button("Disconnect") { state.disconnect() }
-                    Button("Quit UsageBar") { NSApp.terminate(nil) }
+                    Button("Quit Nibble") { NSApp.terminate(nil) }
                 } label: {
                     Image(systemName: "ellipsis.circle")
                 }
@@ -251,7 +251,7 @@ struct LaunchAtLoginToggle: View {
                 }
             }
             .help(failed
-                  ? "Only works when running from UsageBar.app"
-                  : "Start UsageBar automatically at login")
+                  ? "Only works when running from Nibble.app"
+                  : "Start Nibble automatically at login")
     }
 }

@@ -1,6 +1,6 @@
 import Foundation
 import Combine
-import UsageBarCore
+import NibbleCore
 
 @MainActor
 final class AppState: ObservableObject {

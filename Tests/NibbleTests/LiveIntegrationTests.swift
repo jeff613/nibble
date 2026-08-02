@@ -1,18 +1,18 @@
 import XCTest
-@testable import UsageBarCore
+@testable import NibbleCore
 
 /// End-to-end check against the real Claude Code login and the real usage endpoint.
 ///
-/// Skipped unless `USAGEBAR_INTEGRATION=1` is set, because it needs a signed-in
+/// Skipped unless `NIBBLE_INTEGRATION=1` is set, because it needs a signed-in
 /// Claude Code, network access, and (on first run) approval of a macOS Keychain
 /// prompt. Run it with:
 ///
-///     USAGEBAR_INTEGRATION=1 make test
+///     NIBBLE_INTEGRATION=1 make test
 ///
 final class LiveIntegrationTests: XCTestCase {
     override func setUpWithError() throws {
-        try XCTSkipUnless(ProcessInfo.processInfo.environment["USAGEBAR_INTEGRATION"] == "1",
-                          "set USAGEBAR_INTEGRATION=1 to run live checks")
+        try XCTSkipUnless(ProcessInfo.processInfo.environment["NIBBLE_INTEGRATION"] == "1",
+                          "set NIBBLE_INTEGRATION=1 to run live checks")
     }
 
     func testReadsRealLoginAndFetchesLiveQuota() async throws {

@@ -1,11 +1,13 @@
-# UsageBar
+# 🍪 Nibble
 
 A macOS menu-bar app that shows how much of your Claude subscription quota is left,
 so you don't have to keep checking `/usage` while you work.
 
 ```
-✳ 5h 88% · wk 75% · F 81%
+🍪 5h 88% · wk 75% · F 81%
 ```
+
+*(A nibble is four bits. Also what you're doing to your quota.)*
 
 The three numbers are your 5-hour session window, your weekly all-models window, and
 your weekly model-scoped window. The text turns orange past 75% and red past 90%.
@@ -17,17 +19,17 @@ at pay-as-you-go API prices.
 - macOS 14 or later
 - A Claude subscription (Pro or Max)
 - [Claude Code](https://claude.com/claude-code) installed and signed in — it supplies
-  both the login UsageBar reads and the logs behind the 7-day chart
+  both the login Nibble reads and the logs behind the 7-day chart
 
 ## Install
 
 ```sh
-git clone https://github.com/<you>/usagebar.git
-cd usagebar
+git clone https://github.com/<you>/nibble.git
+cd nibble
 make install
 ```
 
-That builds `UsageBar.app`, copies it to `/Applications`, and launches it. The menu-bar
+That builds `Nibble.app`, copies it to `/Applications`, and launches it. The menu-bar
 item will read `✳ Connect` until you finish setup.
 
 ## Connecting your account
@@ -37,14 +39,14 @@ approve access to the Claude login stored on your Mac; approve it and the gauges
 
 ### What this means, precisely
 
-UsageBar reads the OAuth token that Claude Code has already stored on this machine — in
+Nibble reads the OAuth token that Claude Code has already stored on this machine — in
 your Keychain, or `~/.claude/.credentials.json`. That is the same credential Claude Code
 uses to render its own `/usage` output.
 
 - **Nothing is read until you click that button.** The macOS permission prompt is the
   consent gate, and you can revoke it later in Keychain Access.
 - **The token is never copied.** It's read fresh on each check, so it stays valid as
-  Claude Code rotates it. The only thing UsageBar persists is a boolean recording that
+  Claude Code rotates it. The only thing Nibble persists is a boolean recording that
   you connected.
 - **It goes nowhere but Anthropic.** The token is used for one request to
   `api.anthropic.com` and is never logged, transmitted elsewhere, or written to disk.
@@ -79,7 +81,7 @@ history chart will just be empty.
 ### Refresh rate
 
 The usage endpoint enforces an hourly budget and answers a breach with a `Retry-After`
-measured in tens of minutes, so UsageBar spends a request only when one can actually
+measured in tens of minutes, so Nibble spends a request only when one can actually
 reveal a change, rather than polling on a timer and hoping.
 
 Your quota moves for exactly two reasons, and both are predictable:
@@ -103,7 +105,7 @@ re-trip it.
 
 **The usage endpoint is not a public, documented API.** It is the internal endpoint
 Claude Code itself uses to render `/usage`. Anthropic can change or remove it without
-notice, and if they do, this app will need updating. Treat UsageBar as a convenience,
+notice, and if they do, this app will need updating. Treat Nibble as a convenience,
 not something to depend on.
 
 The cost figure is an *estimate* of what your logged usage would have cost at published
@@ -116,15 +118,21 @@ chart but excluded from the cost line.
 ```sh
 make test    # run the unit tests
 make run     # run from source without bundling
-make app     # build UsageBar.app without installing it
+make app     # build Nibble.app without installing it
+make icon    # redraw the cookie from Tools/GenerateIcon.swift
 ```
 
-The code is split in two: `UsageBarCore` holds all the logic (API decoding, log
+The code is split in two: `NibbleCore` holds all the logic (API decoding, log
 scanning, aggregation, pricing, formatting, refresh policy) and has no UI dependencies,
-so it is covered by unit tests. `UsageBar` is a thin AppKit + SwiftUI shell over it.
+so it is covered by unit tests. `Nibble` is a thin AppKit + SwiftUI shell over it.
 
 If `make test` can't find XCTest, your `xcode-select` is pointing at CommandLineTools;
 the Makefile already redirects to `/Applications/Xcode.app` when it exists.
+
+The icon isn't a checked-in image someone has to trust — it's drawn by
+`Tools/GenerateIcon.swift` with CoreGraphics, so you can read exactly how the cookie is
+made and change it. `make icon` regenerates both the app icon and the monochrome
+menu-bar glyph.
 
 ## License
 

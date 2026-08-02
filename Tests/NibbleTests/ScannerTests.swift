@@ -1,5 +1,5 @@
 import XCTest
-@testable import UsageBarCore
+@testable import NibbleCore
 
 final class ScannerTests: XCTestCase {
     var dir: URL!

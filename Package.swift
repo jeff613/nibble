@@ -2,11 +2,11 @@
 import PackageDescription
 
 let package = Package(
-    name: "UsageBar",
+    name: "Nibble",
     platforms: [.macOS(.v14)],
     targets: [
-        .target(name: "UsageBarCore"),
-        .executableTarget(name: "UsageBar", dependencies: ["UsageBarCore"]),
-        .testTarget(name: "UsageBarTests", dependencies: ["UsageBarCore"]),
+        .target(name: "NibbleCore"),
+        .executableTarget(name: "Nibble", dependencies: ["NibbleCore"]),
+        .testTarget(name: "NibbleTests", dependencies: ["NibbleCore"]),
     ]
 )

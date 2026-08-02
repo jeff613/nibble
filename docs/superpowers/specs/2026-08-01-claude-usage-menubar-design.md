@@ -24,7 +24,7 @@ v1 is Claude-only. A provider abstraction leaves room to add OpenAI/Codex later.
   read **only after the user clicks "Use my Claude Code login"**. macOS shows its
   own permission prompt on first access; that prompt is the consent gate.
 - **Read live, never copied.** The token is fetched from Claude Code's store on
-  each request, so it stays fresh as Claude Code rotates it. UsageBar persists
+  each request, so it stays fresh as Claude Code rotates it. Nibble persists
   only a consent boolean in `UserDefaults` — it never writes a credential.
 - **Read-only**: the app never refreshes or rotates the token. If it expires,
   the panel tells the user to sign in with `claude` again.
@@ -69,7 +69,7 @@ decision isn't relitigated:
   Swift 5.9+, macOS 14+.
 - SwiftUI for the panel; AppKit `NSStatusItem` for the bar item.
 - Menu-bar only: `LSUIElement` (no Dock icon).
-- `make app` bundles the built binary into `UsageBar.app` (Info.plist with
+- `make app` bundles the built binary into `Nibble.app` (Info.plist with
   LSUIElement, unsigned/ad-hoc) suitable for /Applications.
 - "Launch at login" toggle in the panel via `SMAppService.mainApp`.
 

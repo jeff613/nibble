@@ -1,5 +1,5 @@
 import XCTest
-@testable import UsageBarCore
+@testable import NibbleCore
 
 final class UsageHistoryTests: XCTestCase {
     let assistantLine = #"{"type":"assistant","timestamp":"2026-08-01T10:00:00.000Z","requestId":"req_1","message":{"id":"msg_1","model":"claude-fable-5","usage":{"input_tokens":10,"output_tokens":20,"cache_creation_input_tokens":100,"cache_read_input_tokens":1000}}}"#

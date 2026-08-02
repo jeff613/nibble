@@ -3,9 +3,9 @@ import Security
 
 /// Reads the OAuth token Claude Code stores on this Mac.
 ///
-/// UsageBar only does this after the user explicitly asks it to, and macOS shows
+/// Nibble only does this after the user explicitly asks it to, and macOS shows
 /// its own permission prompt the first time. Nothing is copied: the token is read
-/// live on each request, so it stays fresh as Claude Code rotates it, and UsageBar
+/// live on each request, so it stays fresh as Claude Code rotates it, and Nibble
 /// never writes, refreshes, or persists a credential of its own.
 public struct ClaudeCodeCredentials {
     public enum LookupError: Error, LocalizedError, Equatable {
@@ -18,7 +18,7 @@ public struct ClaudeCodeCredentials {
             case .notSignedIn:
                 return "No Claude Code login found on this Mac. Run `claude` and sign in first."
             case .accessDenied:
-                return "macOS denied access to the Claude Code login. Approve the prompt, or allow UsageBar in Keychain Access."
+                return "macOS denied access to the Claude Code login. Approve the prompt, or allow Nibble in Keychain Access."
             case .keychain(let status):
                 let detail = SecCopyErrorMessageString(status, nil) as String? ?? "status \(status)"
                 return "Keychain error: \(detail)"

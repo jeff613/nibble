@@ -1,5 +1,5 @@
 import XCTest
-@testable import UsageBarCore
+@testable import NibbleCore
 
 final class StubProtocol: URLProtocol {
     nonisolated(unsafe) static var responses: [(Int, Data)] = []

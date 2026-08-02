@@ -1,5 +1,5 @@
 import XCTest
-@testable import UsageBarCore
+@testable import NibbleCore
 
 final class RefreshPolicyTests: XCTestCase {
     let now = Date(timeIntervalSince1970: 1_000_000)

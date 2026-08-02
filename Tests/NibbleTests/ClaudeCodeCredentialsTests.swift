@@ -1,5 +1,5 @@
 import XCTest
-@testable import UsageBarCore
+@testable import NibbleCore
 
 final class ClaudeCodeCredentialsTests: XCTestCase {
     var dir: URL!

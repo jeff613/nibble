@@ -1,4 +1,4 @@
-# Claude Usage Menu-Bar App (UsageBar) Implementation Plan
+# Claude Usage Menu-Bar App (Nibble) Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -11,18 +11,18 @@
 
 **Goal:** A macOS menu-bar app showing near-real-time Claude subscription quota (5-hour / weekly / Fable-weekly windows) with a click-open panel showing gauges, reset countdowns, a 7-day token chart, and an API-price cost estimate.
 
-**Architecture:** Swift Package with two targets: `UsageBarCore` (pure logic: JSON decoding, JSONL scanning, formatting, pricing, refresh policy — fully unit-tested) and `UsageBar` (thin executable: AppKit status item + SwiftUI popover + wiring — verified by running). Live quota comes from Anthropic's OAuth usage endpoint using the token Claude Code stores in the Keychain; history comes from `~/.claude/projects/**/*.jsonl`.
+**Architecture:** Swift Package with two targets: `NibbleCore` (pure logic: JSON decoding, JSONL scanning, formatting, pricing, refresh policy — fully unit-tested) and `Nibble` (thin executable: AppKit status item + SwiftUI popover + wiring — verified by running). Live quota comes from Anthropic's OAuth usage endpoint using the token Claude Code stores in the Keychain; history comes from `~/.claude/projects/**/*.jsonl`.
 
 **Tech Stack:** Swift 5.9+, SwiftPM only (no Xcode project), macOS 14+, AppKit `NSStatusItem` + SwiftUI + Swift Charts. Zero external dependencies.
 
 ## Global Constraints
 
 - macOS 14+, Swift 5.9+, SwiftPM only (`swift build` / `swift test`), **no external dependencies**.
-- App name: **UsageBar**. Bundle ID: `com.jeff613.usagebar`. Menu-bar only (`LSUIElement`).
+- App name: **Nibble**. Bundle ID: `com.jeff613.usagebar`. Menu-bar only (`LSUIElement`).
 - Credentials are **read-only**: never write, refresh, or mutate the Claude Code token.
 - Endpoint: `GET https://api.anthropic.com/api/oauth/usage` with headers `Authorization: Bearer <token>` and `anthropic-beta: oauth-2025-04-20`.
 - Parse the response's `limits` array generically (not the fixed top-level fields). Malformed entries are skipped, never fatal.
-- `UsageBarCore` must not import AppKit/SwiftUI (keeps tests headless).
+- `NibbleCore` must not import AppKit/SwiftUI (keeps tests headless).
 - Pricing table ($/MTok): fable|mythos → 10 in / 50 out; opus → 5/25; sonnet → 3/15; haiku → 1/5. Cache write = 1.25 × input rate, cache read = 0.1 × input rate. Unknown model → no pricing (tokens still counted, cost excluded).
 - Commit after every task with a conventional message.
 
@@ -32,9 +32,9 @@
 
 **Files:**
 - Create: `Package.swift`
-- Create: `Sources/UsageBarCore/UsageSnapshot.swift`
-- Create: `Sources/UsageBar/main.swift` (placeholder so the package builds)
-- Test: `Tests/UsageBarTests/UsageDecodingTests.swift`
+- Create: `Sources/NibbleCore/UsageSnapshot.swift`
+- Create: `Sources/Nibble/main.swift` (placeholder so the package builds)
+- Test: `Tests/NibbleTests/UsageDecodingTests.swift`
 
 **Interfaces:**
 - Produces: `struct LimitWindow: Equatable, Sendable { var kind: String; var percent: Double; var resetsAt: Date?; var severity: String?; var modelName: String? }`
@@ -48,20 +48,20 @@
 import PackageDescription
 
 let package = Package(
-    name: "UsageBar",
+    name: "Nibble",
     platforms: [.macOS(.v14)],
     targets: [
-        .target(name: "UsageBarCore"),
-        .executableTarget(name: "UsageBar", dependencies: ["UsageBarCore"]),
-        .testTarget(name: "UsageBarTests", dependencies: ["UsageBarCore"]),
+        .target(name: "NibbleCore"),
+        .executableTarget(name: "Nibble", dependencies: ["NibbleCore"]),
+        .testTarget(name: "NibbleTests", dependencies: ["NibbleCore"]),
     ]
 )
 ```
 
-`Sources/UsageBar/main.swift` placeholder:
+`Sources/Nibble/main.swift` placeholder:
 
 ```swift
-print("UsageBar placeholder — replaced in Task 8")
+print("Nibble placeholder — replaced in Task 8")
 ```
 
 - [ ] **Step 2: Write the failing test**
@@ -70,7 +70,7 @@ Use a fixture captured from the real endpoint (trimmed):
 
 ```swift
 import XCTest
-@testable import UsageBarCore
+@testable import NibbleCore
 
 final class UsageDecodingTests: XCTestCase {
     static let fixture = Data("""
@@ -120,7 +120,7 @@ Expected: FAIL — `UsageResponseParser` not found.
 
 - [ ] **Step 4: Write minimal implementation**
 
-`Sources/UsageBarCore/UsageSnapshot.swift`:
+`Sources/NibbleCore/UsageSnapshot.swift`:
 
 ```swift
 import Foundation
@@ -203,8 +203,8 @@ git commit -m "feat: package scaffold and usage endpoint decoding"
 ### Task 2: Bar text, severity level, and countdown formatting
 
 **Files:**
-- Create: `Sources/UsageBarCore/Formatting.swift`
-- Test: `Tests/UsageBarTests/FormattingTests.swift`
+- Create: `Sources/NibbleCore/Formatting.swift`
+- Test: `Tests/NibbleTests/FormattingTests.swift`
 
 **Interfaces:**
 - Consumes: `LimitWindow` (Task 1)
@@ -215,7 +215,7 @@ git commit -m "feat: package scaffold and usage endpoint decoding"
 
 ```swift
 import XCTest
-@testable import UsageBarCore
+@testable import NibbleCore
 
 final class FormattingTests: XCTestCase {
     let windows = [
@@ -317,8 +317,8 @@ public enum Formatting {
 ### Task 3: Credential store (Keychain + file fallback)
 
 **Files:**
-- Create: `Sources/UsageBarCore/CredentialStore.swift`
-- Test: `Tests/UsageBarTests/CredentialTests.swift`
+- Create: `Sources/NibbleCore/CredentialStore.swift`
+- Test: `Tests/NibbleTests/CredentialTests.swift`
 
 **Interfaces:**
 - Produces: `enum CredentialParser { static func accessToken(fromJSON data: Data) -> String? }`
@@ -328,7 +328,7 @@ public enum Formatting {
 
 ```swift
 import XCTest
-@testable import UsageBarCore
+@testable import NibbleCore
 
 final class CredentialTests: XCTestCase {
     func testExtractsAccessToken() {
@@ -392,7 +392,7 @@ public struct CredentialStore {
 }
 ```
 
-Note: the first Keychain read from the app triggers a one-time macOS permission prompt ("UsageBar wants to access…"). The user should click **Always Allow**. This is expected and documented in the final README step.
+Note: the first Keychain read from the app triggers a one-time macOS permission prompt ("Nibble wants to access…"). The user should click **Always Allow**. This is expected and documented in the final README step.
 
 - [ ] **Step 4: Run tests** — Expected: PASS.
 
@@ -403,8 +403,8 @@ Note: the first Keychain read from the app triggers a one-time macOS permission 
 ### Task 4: Usage client with 401 re-read retry
 
 **Files:**
-- Create: `Sources/UsageBarCore/ClaudeUsageClient.swift`
-- Test: `Tests/UsageBarTests/UsageClientTests.swift`
+- Create: `Sources/NibbleCore/ClaudeUsageClient.swift`
+- Test: `Tests/NibbleTests/UsageClientTests.swift`
 
 **Interfaces:**
 - Consumes: `UsageResponseParser`, `LimitWindow` (Task 1)
@@ -415,7 +415,7 @@ Note: the first Keychain read from the app triggers a one-time macOS permission 
 
 ```swift
 import XCTest
-@testable import UsageBarCore
+@testable import NibbleCore
 
 final class StubProtocol: URLProtocol {
     // Queue of (status, body) responses; consumed one per request.
@@ -533,8 +533,8 @@ public final class ClaudeUsageClient {
 ### Task 5: JSONL line parsing and day/model aggregation
 
 **Files:**
-- Create: `Sources/UsageBarCore/UsageHistory.swift`
-- Test: `Tests/UsageBarTests/UsageHistoryTests.swift`
+- Create: `Sources/NibbleCore/UsageHistory.swift`
+- Test: `Tests/NibbleTests/UsageHistoryTests.swift`
 
 **Interfaces:**
 - Produces: `struct UsageEvent: Equatable { var timestamp: Date; var model: String; var dedupeKey: String?; var input: Int; var output: Int; var cacheCreation: Int; var cacheRead: Int }`
@@ -547,7 +547,7 @@ public final class ClaudeUsageClient {
 
 ```swift
 import XCTest
-@testable import UsageBarCore
+@testable import NibbleCore
 
 final class UsageHistoryTests: XCTestCase {
     let assistantLine = #"{"type":"assistant","timestamp":"2026-08-01T10:00:00.000Z","requestId":"req_1","message":{"id":"msg_1","model":"claude-fable-5","usage":{"input_tokens":10,"output_tokens":20,"cache_creation_input_tokens":100,"cache_read_input_tokens":1000}}}"#
@@ -672,8 +672,8 @@ public enum UsageAggregator {
 ### Task 6: Incremental history scanner
 
 **Files:**
-- Create: `Sources/UsageBarCore/UsageHistoryScanner.swift`
-- Test: `Tests/UsageBarTests/ScannerTests.swift`
+- Create: `Sources/NibbleCore/UsageHistoryScanner.swift`
+- Test: `Tests/NibbleTests/ScannerTests.swift`
 
 **Interfaces:**
 - Consumes: `UsageLineParser`, `UsageAggregator`, `DayModelKey`, `TokenCounts` (Task 5)
@@ -683,7 +683,7 @@ public enum UsageAggregator {
 
 ```swift
 import XCTest
-@testable import UsageBarCore
+@testable import NibbleCore
 
 final class ScannerTests: XCTestCase {
     var dir: URL!
@@ -803,8 +803,8 @@ public final class UsageHistoryScanner {
 ### Task 7: Pricing table and cost estimate
 
 **Files:**
-- Create: `Sources/UsageBarCore/Pricing.swift`
-- Test: `Tests/UsageBarTests/PricingTests.swift`
+- Create: `Sources/NibbleCore/Pricing.swift`
+- Test: `Tests/NibbleTests/PricingTests.swift`
 
 **Interfaces:**
 - Consumes: `TokenCounts`, `DayModelKey` (Task 5)
@@ -815,7 +815,7 @@ public final class UsageHistoryScanner {
 
 ```swift
 import XCTest
-@testable import UsageBarCore
+@testable import NibbleCore
 
 final class PricingTests: XCTestCase {
     func testTierMatching() {
@@ -908,9 +908,9 @@ Note the computed cache rates require `ModelPricing` init with just input/output
 ### Task 8: Refresh policy + directory watcher
 
 **Files:**
-- Create: `Sources/UsageBarCore/RefreshPolicy.swift`
-- Create: `Sources/UsageBarCore/DirectoryWatcher.swift`
-- Test: `Tests/UsageBarTests/RefreshPolicyTests.swift`
+- Create: `Sources/NibbleCore/RefreshPolicy.swift`
+- Create: `Sources/NibbleCore/DirectoryWatcher.swift`
+- Test: `Tests/NibbleTests/RefreshPolicyTests.swift`
 
 **Interfaces:**
 - Produces: `enum RefreshPolicy { static let activeInterval: TimeInterval = 10; static let idleInterval: TimeInterval = 60; static func interval(lastActivity: Date?, maxPercent: Double, now: Date) -> TimeInterval }` — active (10s) if activity within last 300s OR maxPercent ≥ 70, else idle (60s).
@@ -920,7 +920,7 @@ Note the computed cache rates require `ModelPricing` init with just input/output
 
 ```swift
 import XCTest
-@testable import UsageBarCore
+@testable import NibbleCore
 
 final class RefreshPolicyTests: XCTestCase {
     let now = Date(timeIntervalSince1970: 1_000_000)
@@ -1022,12 +1022,12 @@ public final class DirectoryWatcher {
 ### Task 9: App wiring — state, status item, main entry
 
 **Files:**
-- Create: `Sources/UsageBar/AppState.swift`
-- Create: `Sources/UsageBar/StatusItemController.swift`
-- Modify: `Sources/UsageBar/main.swift` (replace placeholder)
+- Create: `Sources/Nibble/AppState.swift`
+- Create: `Sources/Nibble/StatusItemController.swift`
+- Modify: `Sources/Nibble/main.swift` (replace placeholder)
 
 **Interfaces:**
-- Consumes: everything from `UsageBarCore`.
+- Consumes: everything from `NibbleCore`.
 - Produces: `@MainActor final class AppState: ObservableObject` with `@Published var windows: [LimitWindow]`, `@Published var history: [DayModelKey: TokenCounts]`, `@Published var lastUpdated: Date?`, `@Published var errorHint: String?`, plus `func start()`, `func refreshNow()`. Task 10's panel view consumes exactly these.
 - Produces: `@MainActor final class StatusItemController` — owns `NSStatusItem` + `NSPopover`; `init(state: AppState, panel: NSViewController)`; observes `state.$windows` via Combine and re-renders the bar title.
 
@@ -1036,7 +1036,7 @@ public final class DirectoryWatcher {
 ```swift
 import Foundation
 import Combine
-import UsageBarCore
+import NibbleCore
 
 @MainActor
 final class AppState: ObservableObject {
@@ -1116,7 +1116,7 @@ final class AppState: ObservableObject {
 ```swift
 import AppKit
 import Combine
-import UsageBarCore
+import NibbleCore
 
 @MainActor
 final class StatusItemController {
@@ -1207,7 +1207,7 @@ struct UsagePanelView: View {
 - [ ] **Step 4: Build and run manually**
 
 Run: `swift build && swift test 2>&1 | tail -3` — Expected: build + tests pass.
-Then: `swift run UsageBar` (leave running ~30s).
+Then: `swift run Nibble` (leave running ~30s).
 Expected: a menu-bar item appears showing real percentages like `✳ 5h 88% · wk 75% · F 81%`; macOS shows a Keychain permission prompt on first run (click Always Allow); clicking the item opens the placeholder popover. Ctrl-C to quit.
 
 - [ ] **Step 5: Commit** — `git add -A && git commit -m "feat: menu bar app wiring with live quota display"`
@@ -1217,8 +1217,8 @@ Expected: a menu-bar item appears showing real percentages like `✳ 5h 88% · w
 ### Task 10: Panel UI, launch-at-login, app bundle
 
 **Files:**
-- Create: `Sources/UsageBar/UsagePanelView.swift` (move out of main.swift, full version)
-- Modify: `Sources/UsageBar/main.swift` (remove temporary view)
+- Create: `Sources/Nibble/UsagePanelView.swift` (move out of main.swift, full version)
+- Modify: `Sources/Nibble/main.swift` (remove temporary view)
 - Create: `Makefile`
 - Create: `README.md`
 
@@ -1231,7 +1231,7 @@ Expected: a menu-bar item appears showing real percentages like `✳ 5h 88% · w
 import SwiftUI
 import Charts
 import ServiceManagement
-import UsageBarCore
+import NibbleCore
 
 struct UsagePanelView: View {
     @ObservedObject var state: AppState
@@ -1371,25 +1371,25 @@ struct LaunchAtLoginToggle: View {
                     else { try SMAppService.mainApp.unregister() }
                     error = nil
                 } catch {
-                    self.error = "Only works from UsageBar.app"
+                    self.error = "Only works from Nibble.app"
                     enabled = false
                 }
             }
-            .help(error ?? "Start UsageBar automatically (requires running from UsageBar.app)")
+            .help(error ?? "Start Nibble automatically (requires running from Nibble.app)")
     }
 }
 ```
 
 - [ ] **Step 2: Build, test, and run manually**
 
-Run: `swift build && swift test 2>&1 | tail -3`, then `swift run UsageBar`.
+Run: `swift build && swift test 2>&1 | tail -3`, then `swift run Nibble`.
 Expected: clicking the bar item shows three gauges with ticking countdowns, a stacked bar chart of the past week, and a plausible cost line. The launch-at-login toggle shows its "requires bundle" help when run via `swift run` (expected).
 
 - [ ] **Step 3: Write the Makefile**
 
 ```makefile
-APP := UsageBar.app
-BINARY := .build/release/UsageBar
+APP := Nibble.app
+BINARY := .build/release/Nibble
 
 .PHONY: app clean install test
 
@@ -1402,14 +1402,14 @@ $(BINARY): $(shell find Sources -name '*.swift') Package.swift
 app: $(BINARY)
 	rm -rf $(APP)
 	mkdir -p $(APP)/Contents/MacOS
-	cp $(BINARY) $(APP)/Contents/MacOS/UsageBar
+	cp $(BINARY) $(APP)/Contents/MacOS/Nibble
 	printf '%s\n' \
 	  '<?xml version="1.0" encoding="UTF-8"?>' \
 	  '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' \
 	  '<plist version="1.0"><dict>' \
 	  '  <key>CFBundleIdentifier</key><string>com.jeff613.usagebar</string>' \
-	  '  <key>CFBundleName</key><string>UsageBar</string>' \
-	  '  <key>CFBundleExecutable</key><string>UsageBar</string>' \
+	  '  <key>CFBundleName</key><string>Nibble</string>' \
+	  '  <key>CFBundleExecutable</key><string>Nibble</string>' \
 	  '  <key>CFBundlePackageType</key><string>APPL</string>' \
 	  '  <key>CFBundleShortVersionString</key><string>1.0</string>' \
 	  '  <key>LSMinimumSystemVersion</key><string>14.0</string>' \
@@ -1427,11 +1427,11 @@ clean:
 	rm -rf .build $(APP)
 ```
 
-Add `UsageBar.app/` and `.build/` to `.gitignore`.
+Add `Nibble.app/` and `.build/` to `.gitignore`.
 
 - [ ] **Step 4: Build the bundle and verify end-to-end**
 
-Run: `make app && open UsageBar.app`
+Run: `make app && open Nibble.app`
 Expected: app launches with no Dock icon, menu-bar item shows live data, Keychain prompt appears once for the bundled app (Always Allow), popover works, launch-at-login toggle now succeeds. Quit via the panel's Quit button.
 
 - [ ] **Step 5: Write README.md** — brief: what it is, `make install`, the Keychain prompt note, `make test`, and that Codex/OpenAI support is a planned follow-up via the same architecture (new client + windows merged into `AppState.windows`).
@@ -1443,7 +1443,7 @@ Expected: app launches with no Dock icon, menu-bar item shows live data, Keychai
 ## Verification checklist (end of plan)
 
 - [ ] `swift test` — all green.
-- [ ] `make app && open UsageBar.app` — bar shows live percentages matching `claude` `/usage`.
+- [ ] `make app && open Nibble.app` — bar shows live percentages matching `claude` `/usage`.
 - [ ] While running a Claude Code prompt, the bar percentage updates within ~10s of activity.
 - [ ] Panel: gauges + countdowns tick, 7-day chart populated, cost line plausible.
 - [ ] Kill network (Wi-Fi off) → bar keeps last data, panel shows offline hint.

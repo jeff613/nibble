@@ -1,6 +1,6 @@
 import AppKit
 import Combine
-import UsageBarCore
+import NibbleCore
 
 @MainActor
 final class StatusItemController {
@@ -18,6 +18,14 @@ final class StatusItemController {
         statusItem.button?.target = self
         statusItem.button?.action = #selector(togglePopover)
 
+        // Template image so AppKit tints it for light and dark menu bars.
+        // Absent when running unbundled via `swift run`; the text stands alone.
+        if let icon = NSImage(named: "MenuBarIcon") {
+            icon.isTemplate = true
+            statusItem.button?.image = icon
+            statusItem.button?.imagePosition = .imageLeading
+        }
+
         state.$windows.combineLatest(state.$needsSetup)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] windows, needsSetup in self?.render(windows, needsSetup: needsSetup) }
@@ -27,7 +35,9 @@ final class StatusItemController {
     }
 
     private func render(_ windows: [LimitWindow], needsSetup: Bool) {
-        let text = needsSetup ? "✳ Connect" : "✳ " + Formatting.barText(windows)
+        let hasIcon = statusItem.button?.image != nil
+        let label = needsSetup ? "Connect" : Formatting.barText(windows)
+        let text = hasIcon ? " \(label)" : "🍪 \(label)"
         let color: NSColor
         switch Formatting.severity(windows) {
         case .normal: color = .labelColor

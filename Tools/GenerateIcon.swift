@@ -124,4 +124,7 @@ for (size, name) in [(16, "16x16"), (32, "16x16@2x"), (32, "32x32"), (64, "32x32
 write(render(size: 18, monochrome: true), to: "\(out)/MenuBarIcon.png")
 write(render(size: 36, monochrome: true), to: "\(out)/MenuBarIcon@2x.png")
 
+// Standalone copy for the README.
+write(render(size: 256, monochrome: false), to: "\(out)/icon.png")
+
 print("wrote \(out)/Nibble.iconset and menu-bar glyphs")

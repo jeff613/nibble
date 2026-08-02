@@ -1,7 +1,9 @@
-# 🍪 Nibble
+<img src="Assets/icon.png" width="128" alt="Nibble icon">
 
-A macOS menu-bar app that shows how much of your Claude subscription quota is left,
-so you don't have to keep checking `/usage` while you work.
+# Nibble
+
+A macOS menu-bar app that shows how much of your Claude subscription quota is left, so
+you don't have to keep checking `/usage` while you work.
 
 ```
 🍪 5h 88% · wk 75% · F 81%
@@ -10,9 +12,12 @@ so you don't have to keep checking `/usage` while you work.
 *(A nibble is four bits. Also what you're doing to your quota.)*
 
 The three numbers are your 5-hour session window, your weekly all-models window, and
-your weekly model-scoped window. The text turns orange past 75% and red past 90%.
-Click it for reset countdowns, a 7-day token chart, and what the week would have cost
-at pay-as-you-go API prices.
+your weekly model-scoped window. The text turns orange past 75% and red past 90%, so a
+glance tells you whether to worry. Click it for reset countdowns, a 7-day token chart
+broken down by model, and what the week would have cost at pay-as-you-go API prices.
+
+**Status:** first release. It works, and it's built on an endpoint Anthropic doesn't
+document — see [Caveats](#caveats) before depending on it.
 
 ## Requirements
 
@@ -24,13 +29,18 @@ at pay-as-you-go API prices.
 ## Install
 
 ```sh
-git clone https://github.com/<you>/nibble.git
+git clone https://github.com/jeff613/nibble.git
 cd nibble
 make install
 ```
 
 That builds `Nibble.app`, copies it to `/Applications`, and launches it. The menu-bar
-item will read `✳ Connect` until you finish setup.
+item reads `🍪 Connect` until you finish setup.
+
+Because the app is signed with a local ad-hoc signature rather than a paid Apple
+Developer certificate, macOS may refuse to open it the first time. If it does, go to
+**System Settings → Privacy & Security**, scroll down, and click **Open Anyway**. You
+only have to do this once.
 
 ## Connecting your account
 
@@ -120,6 +130,21 @@ The cost figure is an *estimate* of what your logged usage would have cost at pu
 API list prices. It is not a bill, it does not reflect what you actually pay for your
 subscription, and models with no entry in the pricing table are counted in the token
 chart but excluded from the cost line.
+
+## Contributing
+
+`main` holds released, working code. `develop` is where work lands. Branch from
+`develop`, and open pull requests against it.
+
+```sh
+git checkout develop
+git checkout -b my-change
+make test
+```
+
+Please keep logic in `NibbleCore` where it can be unit tested, and keep `Nibble` a thin
+shell over it. If you're changing behaviour, a test that fails before your fix is worth
+more than one that passes after it.
 
 ## Development
 

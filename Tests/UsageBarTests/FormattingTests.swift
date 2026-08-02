@@ -29,6 +29,16 @@ final class FormattingTests: XCTestCase {
         XCTAssertEqual(Formatting.severity([]), .normal)
     }
 
+    func testCompactCount() {
+        XCTAssertEqual(Formatting.compactCount(0), "0")
+        XCTAssertEqual(Formatting.compactCount(999), "999")
+        XCTAssertEqual(Formatting.compactCount(1_000), "1K")
+        XCTAssertEqual(Formatting.compactCount(45_300), "45.3K")
+        XCTAssertEqual(Formatting.compactCount(1_200_000), "1.2M")
+        XCTAssertEqual(Formatting.compactCount(300_000_000), "300M")
+        XCTAssertEqual(Formatting.compactCount(2_500_000_000), "2.5B")
+    }
+
     func testCountdown() {
         let now = Date(timeIntervalSince1970: 0)
         XCTAssertEqual(Formatting.countdown(until: now.addingTimeInterval(2 * 3600 + 14 * 60), now: now), "resets in 2h 14m")

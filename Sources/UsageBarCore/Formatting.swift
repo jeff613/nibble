@@ -35,6 +35,23 @@ public enum Formatting {
         return .normal
     }
 
+    /// Compact token counts for chart axes: 45K, 3M, 1.2B — never `3.0E8`.
+    public static func compactCount(_ value: Double) -> String {
+        let magnitude = abs(value)
+        let (scaled, suffix): (Double, String)
+        switch magnitude {
+        case 1_000_000_000...: (scaled, suffix) = (value / 1_000_000_000, "B")
+        case 1_000_000...: (scaled, suffix) = (value / 1_000_000, "M")
+        case 1_000...: (scaled, suffix) = (value / 1_000, "K")
+        default: return String(Int(value.rounded()))
+        }
+        // One decimal only when it adds information: 1.2M, but 300M not 300.0M.
+        let rounded = (scaled * 10).rounded() / 10
+        return rounded == rounded.rounded()
+            ? "\(Int(rounded))\(suffix)"
+            : String(format: "%.1f%@", rounded, suffix)
+    }
+
     public static func countdown(until: Date, now: Date) -> String {
         let seconds = until.timeIntervalSince(now)
         guard seconds > 0 else { return "resetting…" }

@@ -208,6 +208,16 @@ struct WeekChart: View {
                         y: .value("Tokens", bar.tokens))
                     .foregroundStyle(by: .value("Model", bar.model))
             }
+            .chartYAxis {
+                AxisMarks { value in
+                    AxisGridLine()
+                    AxisValueLabel {
+                        if let tokens = value.as(Double.self) {
+                            Text(Formatting.compactCount(tokens))
+                        }
+                    }
+                }
+            }
             .chartLegend(position: .bottom, spacing: 4)
             .frame(height: 120)
         }

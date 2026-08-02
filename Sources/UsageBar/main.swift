@@ -9,6 +9,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         MainActor.assumeIsolated {
             let state = AppState()
             let panel = NSHostingController(rootView: UsagePanelView(state: state))
+            // Without this the popover keeps a default size and crops the content.
+            panel.sizingOptions = [.preferredContentSize]
             statusController = StatusItemController(state: state, panel: panel)
             self.state = state
             state.start()

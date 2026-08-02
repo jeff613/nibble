@@ -16,8 +16,8 @@ at pay-as-you-go API prices.
 
 - macOS 14 or later
 - A Claude subscription (Pro or Max)
-- [Claude Code](https://claude.com/claude-code) installed — used to mint the token and,
-  optionally, as the source of the 7-day history chart
+- [Claude Code](https://claude.com/claude-code) installed and signed in — it supplies
+  both the login UsageBar reads and the logs behind the 7-day chart
 
 ## Install
 
@@ -32,32 +32,48 @@ item will read `✳ Connect` until you finish setup.
 
 ## Connecting your account
 
-Click the menu-bar item and follow the two steps it shows:
+Click the menu-bar item, then click **Use my Claude Code login**. macOS will ask you to
+approve access to the Claude login stored on your Mac; approve it and the gauges fill in.
 
-1. Run `claude setup-token` in a terminal. This is Claude Code's official command for
-   minting a long-lived token tied to your own subscription.
-2. Paste the token into UsageBar and click **Connect**.
+### What this means, precisely
 
-UsageBar verifies the token against the API before storing it, so a bad paste fails
-immediately rather than leaving you with a silently broken app.
+UsageBar reads the OAuth token that Claude Code has already stored on this machine — in
+your Keychain, or `~/.claude/.credentials.json`. That is the same credential Claude Code
+uses to render its own `/usage` output.
 
-### About your token
+- **Nothing is read until you click that button.** The macOS permission prompt is the
+  consent gate, and you can revoke it later in Keychain Access.
+- **The token is never copied.** It's read fresh on each check, so it stays valid as
+  Claude Code rotates it. The only thing UsageBar persists is a boolean recording that
+  you connected.
+- **It goes nowhere but Anthropic.** The token is used for one request to
+  `api.anthropic.com` and is never logged, transmitted elsewhere, or written to disk.
 
-The token is stored in your login Keychain under the service name `UsageBar`, and it is
-the only credential the app touches. **UsageBar never reads credentials belonging to
-other applications** and never transmits your token anywhere except `api.anthropic.com`.
+**Disconnect** in the panel's `⋯` menu makes the app forget your consent and stop
+reading anything. To revoke the underlying login, run `claude auth logout`.
 
-To disconnect, use **Disconnect token…** in the panel's `⋯` menu, which deletes the
-Keychain entry. To revoke the token itself, use your Anthropic account settings.
+### Why not a token you paste in yourself?
+
+That was the original design, and it would be cleaner — but it doesn't work. Tokens from
+`claude setup-token` are *inference*-scoped: they let scripts spend your subscription on
+API calls. The usage endpoint is *account*-scoped, and returns HTTP 403 for them. There's
+no flag to widen the scope.
+
+The other option is a browser login flow, which this project deliberately doesn't do.
+Anthropic offers no public OAuth client registration for subscriptions, so any
+third-party app doing that must reuse Claude Code's client ID — meaning you'd approve a
+consent screen naming Claude Code for software Anthropic didn't write. Reading a
+credential you already chose to store, behind an OS-level prompt, is the more honest of
+the two.
 
 ## What it reads
 
 | Data | Source |
 |---|---|
-| Live quota percentages and reset times | `GET https://api.anthropic.com/api/oauth/usage`, authenticated with your token |
+| Live quota percentages and reset times | `GET https://api.anthropic.com/api/oauth/usage`, authenticated with your Claude Code login |
 | 7-day token history and cost estimate | Your local Claude Code logs in `~/.claude/projects/**/*.jsonl` — read-only, never uploaded |
 
-If you don't use Claude Code for day-to-day work, the quota gauges still work; the
+If you have Claude Code signed in but rarely use it, the quota gauges still work; the
 history chart will just be empty.
 
 Refresh is adaptive so the numbers track reality while you're actually burning quota:

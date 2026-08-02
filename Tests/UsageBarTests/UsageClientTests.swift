@@ -75,20 +75,15 @@ final class UsageClientTests: XCTestCase {
         }
     }
 
-    func testValidateUsesSuppliedTokenNotStoredOne() async throws {
-        StubProtocol.responses = [(200, UsageDecodingTests.fixture)]
-        let windows = try await makeClient(token: nil).validate(token: "pasted")
-        XCTAssertEqual(windows.count, 3)
-        XCTAssertEqual(StubProtocol.seenAuthHeaders, ["Bearer pasted"])
-    }
-
-    func testValidateRejectsBadToken() async {
-        StubProtocol.responses = [(401, Data())]
+    func testThrowsBadStatusOnForbidden() async {
+        // A wrongly-scoped token (e.g. from `claude setup-token`) returns 403,
+        // not 401 — it is a valid token that may not read this endpoint.
+        StubProtocol.responses = [(403, Data())]
         do {
-            _ = try await makeClient(token: nil).validate(token: "junk")
+            _ = try await makeClient(token: "wrong-scope").fetchUsage()
             XCTFail("should throw")
-        } catch UsageClientError.unauthorized {
-            // expected
+        } catch UsageClientError.badStatus(let code) {
+            XCTAssertEqual(code, 403)
         } catch {
             XCTFail("wrong error \(error)")
         }

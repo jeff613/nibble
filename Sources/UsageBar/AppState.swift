@@ -4,14 +4,18 @@ import UsageBarCore
 
 @MainActor
 final class AppState: ObservableObject {
+    /// Set once the user has explicitly connected. The token itself is never
+    /// copied — only this flag is persisted, and the credential is read live.
+    private static let consentKey = "hasConnectedClaudeCodeLogin"
+
     @Published var windows: [LimitWindow] = []
     @Published var history: [DayModelKey: TokenCounts] = [:]
     @Published var lastUpdated: Date?
     @Published var errorHint: String?
-    /// True until the user has connected a working token.
     @Published var needsSetup: Bool
 
-    private let tokenStore = TokenStore()
+    private let credentials = ClaudeCodeCredentials()
+    private let defaults: UserDefaults
     private let client: ClaudeUsageClient
     private let scanner: UsageHistoryScanner
     private var watcher: DirectoryWatcher?
@@ -19,10 +23,11 @@ final class AppState: ObservableObject {
     private var lastActivity: Date?
     private var lastHistoryScan = Date.distantPast
 
-    init() {
-        let store = tokenStore
-        client = ClaudeUsageClient { store.load() }
-        needsSetup = store.load() == nil
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        let credentials = self.credentials
+        client = ClaudeUsageClient { try? credentials.readToken() }
+        needsSetup = !defaults.bool(forKey: Self.consentKey)
 
         let projectsDir = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".claude/projects")
@@ -47,13 +52,20 @@ final class AppState: ObservableObject {
         Task { await refresh() }
     }
 
-    /// Verifies a pasted token against the live endpoint before storing it.
-    func connect(token: String) async -> String? {
-        let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return "Paste the token first." }
+    /// Reads the Claude Code login for the first time and confirms it works
+    /// before remembering the user's consent. Returns an error message, or nil.
+    func connect() async -> String? {
         do {
-            windows = try await client.validate(token: trimmed)
-            try tokenStore.save(trimmed)
+            _ = try credentials.readToken()
+        } catch let error as ClaudeCodeCredentials.LookupError {
+            return error.errorDescription
+        } catch {
+            return error.localizedDescription
+        }
+
+        do {
+            windows = try await client.fetchUsage()
+            defaults.set(true, forKey: Self.consentKey)
             needsSetup = false
             lastUpdated = Date()
             errorHint = nil
@@ -61,18 +73,16 @@ final class AppState: ObservableObject {
             scheduleNextPoll()
             return nil
         } catch UsageClientError.unauthorized {
-            return "That token was rejected. Generate a fresh one with `claude setup-token`."
+            return "Claude rejected that login. Run `claude` and sign in again."
         } catch UsageClientError.badStatus(let code) {
-            return "Anthropic returned HTTP \(code). Try again in a moment."
-        } catch let error as TokenStore.TokenError {
-            return error.errorDescription
+            return "Anthropic returned HTTP \(code)."
         } catch {
             return "Couldn't reach Anthropic. Check your connection."
         }
     }
 
-    func signOut() {
-        try? tokenStore.delete()
+    func disconnect() {
+        defaults.set(false, forKey: Self.consentKey)
         windows = []
         lastUpdated = nil
         errorHint = nil
@@ -86,9 +96,9 @@ final class AppState: ObservableObject {
             lastUpdated = Date()
             errorHint = nil
         } catch UsageClientError.notConfigured {
-            needsSetup = true
+            errorHint = "Can't read the Claude Code login — is it still signed in?"
         } catch UsageClientError.unauthorized {
-            errorHint = "Token expired or revoked — reconnect with a new `claude setup-token`."
+            errorHint = "Login expired — run `claude` and sign in again."
         } catch {
             errorHint = "Offline — showing last known data."
         }

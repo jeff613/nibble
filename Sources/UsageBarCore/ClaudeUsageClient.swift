@@ -24,12 +24,6 @@ public final class ClaudeUsageClient {
         return try handle(response)
     }
 
-    /// Validates a token the user just pasted, without storing it.
-    public func validate(token: String) async throws -> [LimitWindow] {
-        let response = try await request(token: token)
-        guard response.status != 401 else { throw UsageClientError.unauthorized }
-        return try handle(response)
-    }
 
     private func request(token: String) async throws -> (status: Int, data: Data) {
         var req = URLRequest(url: Self.endpoint)

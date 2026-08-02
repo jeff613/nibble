@@ -22,7 +22,6 @@ struct UsagePanelView: View {
 
 struct SetupView: View {
     @ObservedObject var state: AppState
-    @State private var token = ""
     @State private var error: String?
     @State private var connecting = false
 
@@ -30,37 +29,15 @@ struct SetupView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Connect UsageBar").font(.headline)
 
-            Text("UsageBar needs a token from your own Claude subscription. It never reads credentials belonging to other apps.")
+            Text("UsageBar reads the Claude login already stored on this Mac by Claude Code. macOS will ask you to approve — nothing is read until you do.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
-            VStack(alignment: .leading, spacing: 4) {
-                Text("1. Run this in a terminal:").font(.caption)
-                HStack {
-                    Text("claude setup-token")
-                        .font(.system(.caption, design: .monospaced))
-                        .textSelection(.enabled)
-                    Spacer()
-                    Button {
-                        NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString("claude setup-token", forType: .string)
-                    } label: {
-                        Image(systemName: "doc.on.doc")
-                    }
-                    .buttonStyle(.borderless)
-                    .help("Copy command")
-                }
-                .padding(8)
-                .background(Color.secondary.opacity(0.12), in: RoundedRectangle(cornerRadius: 6))
-            }
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text("2. Paste the token here:").font(.caption)
-                SecureField("sk-ant-…", text: $token)
-                    .textFieldStyle(.roundedBorder)
-                    .onSubmit { connect() }
-            }
+            Text("The token is read fresh on each check and never copied elsewhere. Your quota data goes nowhere but this window.")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+                .fixedSize(horizontal: false, vertical: true)
 
             if let error {
                 Label(error, systemImage: "exclamationmark.triangle")
@@ -69,12 +46,17 @@ struct SetupView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
+            Button(connecting ? "Connecting…" : "Use my Claude Code login") { connect() }
+                .keyboardShortcut(.defaultAction)
+                .disabled(connecting)
+                .frame(maxWidth: .infinity)
+
             HStack {
-                Button("Quit") { NSApp.terminate(nil) }
+                Text("Requires Claude Code, signed in.")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
                 Spacer()
-                Button(connecting ? "Connecting…" : "Connect") { connect() }
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(connecting || token.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                Button("Quit") { NSApp.terminate(nil) }
             }
         }
         .padding(16)
@@ -85,9 +67,8 @@ struct SetupView: View {
         connecting = true
         error = nil
         Task {
-            error = await state.connect(token: token)
+            error = await state.connect()
             connecting = false
-            if error == nil { token = "" }
         }
     }
 }
@@ -140,7 +121,7 @@ struct DashboardView: View {
                 LaunchAtLoginToggle()
                 Spacer()
                 Menu {
-                    Button("Disconnect token…") { state.signOut() }
+                    Button("Disconnect") { state.disconnect() }
                     Button("Quit UsageBar") { NSApp.terminate(nil) }
                 } label: {
                     Image(systemName: "ellipsis.circle")

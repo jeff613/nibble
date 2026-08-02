@@ -19,11 +19,19 @@ v1 is Claude-only. A provider abstraction leaves room to add OpenAI/Codex later.
 ### Live quota
 - Endpoint: `GET https://api.anthropic.com/api/oauth/usage`
   - Headers: `Authorization: Bearer <token>`, `anthropic-beta: oauth-2025-04-20`
-- Token: read from the macOS Keychain generic password item
-  `Claude Code-credentials` (JSON, path `claudeAiOauth.accessToken`), falling
-  back to `~/.claude/.credentials.json` with the same structure.
-- **Read-only**: the app never refreshes or writes tokens. Claude Code keeps the
-  token fresh through normal use.
+- Token: **supplied by the user**, not harvested. On first run the app asks the
+  user to run `claude setup-token` (Claude Code's official long-lived-token
+  command) and paste the result. The token is validated against the endpoint
+  before being stored in the app's *own* Keychain item (service `UsageBar`).
+- **The app never reads credentials belonging to other applications.** This was
+  a deliberate change from an earlier design that read Claude Code's Keychain
+  entry: the project is intended for public release, and reading another app's
+  stored secrets is not something to ship to strangers. A browser OAuth flow was
+  also considered and rejected — no public OAuth client registration exists for
+  Anthropic subscriptions, so it would require reusing Claude Code's client ID,
+  which would show users a consent screen naming an app that isn't this one.
+- **Read-only**: the app never refreshes or rotates the token. If it expires or
+  is revoked, the panel prompts the user to reconnect.
 - Parse the `limits` array — the authoritative window list — not the fixed
   top-level fields. Each entry: `kind` (`session` / `weekly_all` /
   `weekly_scoped`), `percent` (0–100), `resets_at` (ISO 8601),
@@ -57,7 +65,8 @@ v1 is Claude-only. A provider abstraction leaves room to add OpenAI/Codex later.
 
 | Component | Responsibility |
 |---|---|
-| `CredentialStore` | Read OAuth token from Keychain, fallback JSON file. |
+| `TokenStore` | Save/load/delete the user-supplied token in UsageBar's own Keychain item. |
+| `SetupView` | First-run screen: instructions, paste field, live validation. |
 | `ClaudeUsageClient` | Fetch + decode the usage endpoint into `[LimitWindow]`. |
 | `UsageHistoryScanner` | Scan/aggregate JSONL logs into per-day, per-model token totals + cost. Incremental: caches per-file byte offsets and only reads appended data. |
 | `RefreshScheduler` | Adaptive polling + FSEvents watcher (below). |
@@ -79,10 +88,9 @@ v1 is Claude-only. A provider abstraction leaves room to add OpenAI/Codex later.
 
 ## Error handling
 
-- No credentials found → bar shows `✳ —`; panel explains and points at logging
-  into Claude Code.
-- HTTP 401 → re-read credentials once and retry; if still 401, keep last data
-  with a stale indicator and panel hint "run `claude` to refresh login".
+- No token stored → bar shows `✳ Connect`; panel shows the setup screen.
+- HTTP 401 → keep last data, and prompt the user to reconnect with a fresh
+  `claude setup-token` (the app cannot refresh the token itself).
 - Network failure → keep last data, show last-updated timestamp as stale.
 - Malformed/unknown `limits` entries are skipped, never fatal.
 

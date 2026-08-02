@@ -11,11 +11,17 @@ SWIFT := $(if $(wildcard $(XCODE)),DEVELOPER_DIR=$(XCODE),) swift
 test:
 	$(SWIFT) test
 
-# Redraws the cookie from Tools/GenerateIcon.swift — no binary blobs to trust.
-icon:
+# The drawing code is the source of truth: edit it and the artwork rebuilds.
+# Both steps live here so the .icns can never lag behind the PNGs.
+Assets/Nibble.icns: Tools/GenerateIcon.swift
 	$(SWIFT) Tools/GenerateIcon.swift Assets
 	iconutil -c icns Assets/Nibble.iconset -o Assets/Nibble.icns
 	@echo "Regenerated Assets/Nibble.icns and menu-bar glyphs."
+
+# Force a redraw even when the code hasn't changed.
+icon:
+	rm -f Assets/Nibble.icns
+	$(MAKE) Assets/Nibble.icns
 
 run:
 	$(SWIFT) run Nibble

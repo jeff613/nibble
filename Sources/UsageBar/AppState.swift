@@ -22,6 +22,10 @@ final class AppState: ObservableObject {
     private var timer: Timer?
     private var lastActivity: Date?
     private var lastHistoryScan = Date.distantPast
+    private var lastFetch: Date?
+    private var backoffUntil: Date?
+    private var consecutiveRateLimits = 0
+    private var inFlight = false
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -47,8 +51,15 @@ final class AppState: ObservableObject {
         scheduleNextPoll()
     }
 
-    func refreshNow() {
-        guard !needsSetup else { return }
+    /// Requests a refresh. Coalesced: ignored while a request is in flight,
+    /// inside the minimum spacing window, or while backing off from a 429.
+    func refreshNow(force: Bool = false) {
+        guard !needsSetup, !inFlight else { return }
+        let now = Date()
+        if !force {
+            if let backoffUntil, now < backoffUntil { return }
+            guard RefreshPolicy.shouldFetch(lastFetch: lastFetch, now: now) else { return }
+        }
         Task { await refresh() }
     }
 
@@ -64,6 +75,7 @@ final class AppState: ObservableObject {
         }
 
         do {
+            lastFetch = Date()
             windows = try await client.fetchUsage()
             defaults.set(true, forKey: Self.consentKey)
             needsSetup = false
@@ -74,6 +86,8 @@ final class AppState: ObservableObject {
             return nil
         } catch UsageClientError.unauthorized {
             return "Claude rejected that login. Run `claude` and sign in again."
+        } catch UsageClientError.rateLimited {
+            return "Anthropic is rate limiting this Mac right now. Wait a minute and try again."
         } catch UsageClientError.badStatus(let code) {
             return "Anthropic returned HTTP \(code)."
         } catch {
@@ -91,16 +105,32 @@ final class AppState: ObservableObject {
     }
 
     private func refresh() async {
+        inFlight = true
+        lastFetch = Date()
+        defer { inFlight = false }
+
         do {
             windows = try await client.fetchUsage()
             lastUpdated = Date()
             errorHint = nil
+            backoffUntil = nil
+            consecutiveRateLimits = 0
         } catch UsageClientError.notConfigured {
             errorHint = "Can't read the Claude Code login — is it still signed in?"
         } catch UsageClientError.unauthorized {
             errorHint = "Login expired — run `claude` and sign in again."
+        } catch UsageClientError.rateLimited(let retryAfter) {
+            consecutiveRateLimits += 1
+            let wait = RefreshPolicy.backoff(
+                consecutiveRateLimits: consecutiveRateLimits, retryAfter: retryAfter)
+            backoffUntil = Date().addingTimeInterval(wait)
+            errorHint = "Rate limited by Anthropic — retrying in \(Int(wait / 60) > 0 ? "\(Int(wait / 60))m" : "\(Int(wait))s")."
+        } catch UsageClientError.badStatus(let code) {
+            errorHint = "Anthropic returned HTTP \(code) — showing last known data."
+        } catch let error as URLError where error.code == .notConnectedToInternet {
+            errorHint = "No internet connection — showing last known data."
         } catch {
-            errorHint = "Offline — showing last known data."
+            errorHint = "Couldn't reach Anthropic — showing last known data."
         }
         rescanHistoryIfDue()
     }

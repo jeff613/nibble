@@ -1,8 +1,10 @@
 import Foundation
 
-public enum UsageClientError: Error {
+public enum UsageClientError: Error, Equatable {
     case notConfigured
     case unauthorized
+    /// HTTP 429. `retryAfter` carries the server's `Retry-After` header when present.
+    case rateLimited(retryAfter: TimeInterval?)
     case badStatus(Int)
 }
 
@@ -20,21 +22,27 @@ public final class ClaudeUsageClient {
     public func fetchUsage() async throws -> [LimitWindow] {
         guard let token = tokenProvider() else { throw UsageClientError.notConfigured }
         let response = try await request(token: token)
-        guard response.status != 401 else { throw UsageClientError.unauthorized }
-        return try handle(response)
+
+        switch response.status {
+        case 200:
+            return try UsageResponseParser.parse(response.data)
+        case 401:
+            throw UsageClientError.unauthorized
+        case 429:
+            throw UsageClientError.rateLimited(retryAfter: response.retryAfter)
+        default:
+            throw UsageClientError.badStatus(response.status)
+        }
     }
 
-
-    private func request(token: String) async throws -> (status: Int, data: Data) {
+    private func request(token: String) async throws
+        -> (status: Int, data: Data, retryAfter: TimeInterval?) {
         var req = URLRequest(url: Self.endpoint)
         req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         req.setValue("oauth-2025-04-20", forHTTPHeaderField: "anthropic-beta")
         let (data, resp) = try await session.data(for: req)
-        return ((resp as? HTTPURLResponse)?.statusCode ?? 0, data)
-    }
-
-    private func handle(_ r: (status: Int, data: Data)) throws -> [LimitWindow] {
-        guard r.status == 200 else { throw UsageClientError.badStatus(r.status) }
-        return try UsageResponseParser.parse(r.data)
+        let http = resp as? HTTPURLResponse
+        let retryAfter = http?.value(forHTTPHeaderField: "Retry-After").flatMap(TimeInterval.init)
+        return (http?.statusCode ?? 0, data, retryAfter)
     }
 }

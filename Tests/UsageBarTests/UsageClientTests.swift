@@ -3,6 +3,7 @@ import XCTest
 
 final class StubProtocol: URLProtocol {
     nonisolated(unsafe) static var responses: [(Int, Data)] = []
+    nonisolated(unsafe) static var responseHeaders: [String: String] = [:]
     nonisolated(unsafe) static var seenAuthHeaders: [String] = []
 
     override class func canInit(with request: URLRequest) -> Bool { true }
@@ -12,7 +13,7 @@ final class StubProtocol: URLProtocol {
         Self.seenAuthHeaders.append(request.value(forHTTPHeaderField: "Authorization") ?? "")
         let (status, body) = Self.responses.isEmpty ? (500, Data()) : Self.responses.removeFirst()
         let resp = HTTPURLResponse(url: request.url!, statusCode: status,
-                                   httpVersion: nil, headerFields: nil)!
+                                   httpVersion: nil, headerFields: Self.responseHeaders)!
         client?.urlProtocol(self, didReceive: resp, cacheStoragePolicy: .notAllowed)
         client?.urlProtocol(self, didLoad: body)
         client?.urlProtocolDidFinishLoading(self)
@@ -30,6 +31,7 @@ final class UsageClientTests: XCTestCase {
 
     override func setUp() {
         StubProtocol.responses = []
+        StubProtocol.responseHeaders = [:]
         StubProtocol.seenAuthHeaders = []
     }
 
@@ -84,6 +86,31 @@ final class UsageClientTests: XCTestCase {
             XCTFail("should throw")
         } catch UsageClientError.badStatus(let code) {
             XCTAssertEqual(code, 403)
+        } catch {
+            XCTFail("wrong error \(error)")
+        }
+    }
+
+    func testThrowsRateLimitedOn429WithRetryAfter() async {
+        StubProtocol.responses = [(429, Data())]
+        StubProtocol.responseHeaders = ["Retry-After": "45"]
+        do {
+            _ = try await makeClient(token: "tok").fetchUsage()
+            XCTFail("should throw")
+        } catch UsageClientError.rateLimited(let retryAfter) {
+            XCTAssertEqual(retryAfter, 45)
+        } catch {
+            XCTFail("wrong error \(error)")
+        }
+    }
+
+    func testThrowsRateLimitedWithoutRetryAfterHeader() async {
+        StubProtocol.responses = [(429, Data())]
+        do {
+            _ = try await makeClient(token: "tok").fetchUsage()
+            XCTFail("should throw")
+        } catch UsageClientError.rateLimited(let retryAfter) {
+            XCTAssertNil(retryAfter)
         } catch {
             XCTFail("wrong error \(error)")
         }

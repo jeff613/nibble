@@ -2,6 +2,13 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Deviation from this plan, decided mid-implementation (2026-08-02):** the project
+> is being open-sourced, so Task 3's `CredentialStore` (which read Claude Code's
+> Keychain entry) was replaced by `TokenStore` plus a first-run setup screen where
+> the user pastes a token from `claude setup-token`. The app no longer reads any
+> other application's credentials. Tasks 4, 9, and 10 changed to match. See the
+> design spec for the reasoning, including why browser OAuth was rejected.
+
 **Goal:** A macOS menu-bar app showing near-real-time Claude subscription quota (5-hour / weekly / Fable-weekly windows) with a click-open panel showing gauges, reset countdowns, a 7-day token chart, and an API-price cost estimate.
 
 **Architecture:** Swift Package with two targets: `UsageBarCore` (pure logic: JSON decoding, JSONL scanning, formatting, pricing, refresh policy — fully unit-tested) and `UsageBar` (thin executable: AppKit status item + SwiftUI popover + wiring — verified by running). Live quota comes from Anthropic's OAuth usage endpoint using the token Claude Code stores in the Keychain; history comes from `~/.claude/projects/**/*.jsonl`.

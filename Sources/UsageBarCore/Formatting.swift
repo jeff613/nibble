@@ -1,0 +1,47 @@
+import Foundation
+
+public enum Severity: Int, Comparable, Sendable {
+    case normal, warning, critical
+    public static func < (a: Severity, b: Severity) -> Bool { a.rawValue < b.rawValue }
+}
+
+public enum Formatting {
+    static let kindOrder = ["session": 0, "weekly_all": 1, "weekly_scoped": 2]
+
+    public static func sorted(_ windows: [LimitWindow]) -> [LimitWindow] {
+        windows.sorted { (kindOrder[$0.kind] ?? 99) < (kindOrder[$1.kind] ?? 99) }
+    }
+
+    public static func shortLabel(_ w: LimitWindow) -> String {
+        switch w.kind {
+        case "session": return "5h"
+        case "weekly_all": return "wk"
+        case "weekly_scoped": return w.modelName.map { String($0.prefix(1)) } ?? "m"
+        default: return String(w.kind.prefix(2))
+        }
+    }
+
+    public static func barText(_ windows: [LimitWindow]) -> String {
+        guard !windows.isEmpty else { return "—" }
+        return sorted(windows)
+            .map { "\(shortLabel($0)) \(Int($0.percent.rounded()))%" }
+            .joined(separator: " · ")
+    }
+
+    public static func severity(_ windows: [LimitWindow]) -> Severity {
+        let worst = windows.map(\.percent).max() ?? 0
+        if worst >= 90 { return .critical }
+        if worst >= 75 { return .warning }
+        return .normal
+    }
+
+    public static func countdown(until: Date, now: Date) -> String {
+        let seconds = until.timeIntervalSince(now)
+        guard seconds > 0 else { return "resetting…" }
+        let minutes = Int(seconds / 60)
+        if minutes < 1 { return "resets in <1m" }
+        let hours = minutes / 60
+        let remainder = minutes % 60
+        return hours > 0 ? "resets in \(hours)h \(remainder)m" : "resets in \(remainder)m"
+    }
+}

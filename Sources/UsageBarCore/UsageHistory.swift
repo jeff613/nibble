@@ -70,8 +70,12 @@ public enum UsageAggregator {
         return String(format: "%04d-%02d-%02d", c.year!, c.month!, c.day!)
     }
 
+    /// Folds events into `totals`, skipping ones already seen.
+    /// Returns how many were genuinely new — the signal for "quota just moved".
+    @discardableResult
     public static func fold(events: [UsageEvent], into totals: inout [DayModelKey: TokenCounts],
-                            seen: inout Set<String>, timeZone: TimeZone) {
+                            seen: inout Set<String>, timeZone: TimeZone) -> Int {
+        var accepted = 0
         for e in events {
             if let key = e.dedupeKey {
                 if seen.contains(key) { continue }
@@ -79,6 +83,8 @@ public enum UsageAggregator {
             }
             let key = DayModelKey(day: dayKey(for: e.timestamp, timeZone: timeZone), model: e.model)
             totals[key, default: TokenCounts()].add(e)
+            accepted += 1
         }
+        return accepted
     }
 }

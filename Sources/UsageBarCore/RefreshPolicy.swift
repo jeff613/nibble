@@ -1,37 +1,49 @@
 import Foundation
 
-/// Polls fast while you're actively burning quota, slow when idle — but never
-/// faster than `minimumSpacing`, and backs off hard when the server pushes back.
+/// Decides when to spend a request on the usage endpoint.
+///
+/// The endpoint enforces an hourly budget and answers a breach with a
+/// `Retry-After` measured in tens of minutes, so requests are spent only when
+/// they can actually reveal a change. Quota moves when you use Claude — which
+/// the log watcher already tells us — or when a window resets, which we can
+/// predict exactly. The timer below is only a backstop for usage that never
+/// touches this Mac, such as claude.ai in a browser or a second machine.
 public enum RefreshPolicy {
-    /// The endpoint enforces an hourly budget and answers a breach with a
-    /// `Retry-After` measured in *tens of minutes*, so being greedy costs far
-    /// more freshness than it buys. These intervals keep the worst case at
-    /// 60 requests/hour and the typical case well under it.
-    public static let nearLimitInterval: TimeInterval = 60
+    /// Backstop while Claude Code has been active recently.
     public static let activeInterval: TimeInterval = 120
-    public static let idleInterval: TimeInterval = 300
+    /// Backstop when nothing local is happening. Catches off-machine usage.
+    public static let idleHeartbeat: TimeInterval = 900
+    /// How recently Claude Code must have run to count as active.
     public static let activityWindow: TimeInterval = 300
-
-    /// Percentage past which freshness matters enough to poll every minute.
-    public static let nearLimitThreshold: Double = 80
+    /// Wait this long after a window resets before reading the new value.
+    public static let resetGrace: TimeInterval = 5
 
     /// Hard floor between network calls, whatever triggered them. The file
     /// watcher fires continuously while Claude Code writes logs, so without
     /// this the app would hammer the endpoint and get rate limited.
     public static let minimumSpacing: TimeInterval = 60
 
-    public static func interval(lastActivity: Date?, maxPercent: Double, now: Date) -> TimeInterval {
-        if maxPercent >= nearLimitThreshold { return nearLimitInterval }
-        if let last = lastActivity, now.timeIntervalSince(last) < activityWindow {
-            return activeInterval
+    public static func interval(lastActivity: Date?, now: Date) -> TimeInterval {
+        guard let last = lastActivity, now.timeIntervalSince(last) < activityWindow else {
+            return idleHeartbeat
         }
-        return idleInterval
+        return activeInterval
     }
 
     /// True when enough time has passed since the last network call.
     public static func shouldFetch(lastFetch: Date?, now: Date) -> Bool {
         guard let lastFetch else { return true }
         return now.timeIntervalSince(lastFetch) >= minimumSpacing
+    }
+
+    /// Seconds until the next scheduled poll: the backstop interval, pulled
+    /// earlier if a quota window resets before then (so the jump to 0% shows up
+    /// immediately rather than after a stale wait).
+    public static func nextWakeUp(lastActivity: Date?, resets: [Date], now: Date) -> TimeInterval {
+        let backstop = interval(lastActivity: lastActivity, now: now)
+        guard let nextReset = resets.filter({ $0 > now }).min() else { return backstop }
+        let untilReset = nextReset.timeIntervalSince(now) + resetGrace
+        return max(minimumSpacing, min(backstop, untilReset))
     }
 
     /// How long to wait after a 429.

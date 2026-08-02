@@ -7,35 +7,62 @@ final class RefreshPolicyTests: XCTestCase {
     // MARK: Poll interval
 
     func testActiveWhenRecentActivity() {
-        XCTAssertEqual(RefreshPolicy.interval(lastActivity: now.addingTimeInterval(-60),
-                                              maxPercent: 10, now: now),
+        XCTAssertEqual(RefreshPolicy.interval(lastActivity: now.addingTimeInterval(-60), now: now),
                        RefreshPolicy.activeInterval)
     }
 
-    func testNearLimitPollsFastestEvenWhenIdle() {
-        XCTAssertEqual(RefreshPolicy.interval(lastActivity: nil, maxPercent: 88, now: now),
-                       RefreshPolicy.nearLimitInterval)
-    }
-
-    func testIdleOtherwise() {
-        XCTAssertEqual(RefreshPolicy.interval(lastActivity: now.addingTimeInterval(-600),
-                                              maxPercent: 10, now: now),
-                       RefreshPolicy.idleInterval)
-        XCTAssertEqual(RefreshPolicy.interval(lastActivity: nil, maxPercent: 0, now: now),
-                       RefreshPolicy.idleInterval)
+    func testIdleHeartbeatOtherwise() {
+        XCTAssertEqual(RefreshPolicy.interval(lastActivity: now.addingTimeInterval(-600), now: now),
+                       RefreshPolicy.idleHeartbeat)
+        XCTAssertEqual(RefreshPolicy.interval(lastActivity: nil, now: now),
+                       RefreshPolicy.idleHeartbeat)
     }
 
     func testNoIntervalBeatsTheFloor() {
-        for interval in [RefreshPolicy.nearLimitInterval,
-                         RefreshPolicy.activeInterval,
-                         RefreshPolicy.idleInterval] {
+        for interval in [RefreshPolicy.activeInterval, RefreshPolicy.idleHeartbeat] {
             XCTAssertGreaterThanOrEqual(interval, RefreshPolicy.minimumSpacing)
         }
     }
 
     func testWorstCaseStaysUnderSixtyRequestsPerHour() {
-        let fastest = min(RefreshPolicy.nearLimitInterval, RefreshPolicy.minimumSpacing)
-        XCTAssertLessThanOrEqual(3600 / fastest, 60)
+        XCTAssertLessThanOrEqual(3600 / RefreshPolicy.minimumSpacing, 60)
+    }
+
+    // MARK: Reset-aware scheduling
+
+    func testWakesJustAfterAWindowResets() {
+        let reset = now.addingTimeInterval(90)
+        let wake = RefreshPolicy.nextWakeUp(lastActivity: now, resets: [reset], now: now)
+        XCTAssertEqual(wake, 90 + RefreshPolicy.resetGrace)
+    }
+
+    func testUsesEarliestFutureReset() {
+        let resets = [now.addingTimeInterval(300), now.addingTimeInterval(80)]
+        let wake = RefreshPolicy.nextWakeUp(lastActivity: now, resets: resets, now: now)
+        XCTAssertEqual(wake, 80 + RefreshPolicy.resetGrace)
+    }
+
+    func testIgnoresResetsAlreadyPassed() {
+        let stale = now.addingTimeInterval(-600)
+        let wake = RefreshPolicy.nextWakeUp(lastActivity: now, resets: [stale], now: now)
+        XCTAssertEqual(wake, RefreshPolicy.activeInterval)
+    }
+
+    func testDistantResetDoesNotDelayTheBackstop() {
+        let far = now.addingTimeInterval(100_000)
+        let wake = RefreshPolicy.nextWakeUp(lastActivity: nil, resets: [far], now: now)
+        XCTAssertEqual(wake, RefreshPolicy.idleHeartbeat)
+    }
+
+    func testImminentResetStillRespectsTheFloor() {
+        let imminent = now.addingTimeInterval(2)
+        let wake = RefreshPolicy.nextWakeUp(lastActivity: now, resets: [imminent], now: now)
+        XCTAssertEqual(wake, RefreshPolicy.minimumSpacing)
+    }
+
+    func testNoResetsFallsBackToInterval() {
+        XCTAssertEqual(RefreshPolicy.nextWakeUp(lastActivity: nil, resets: [], now: now),
+                       RefreshPolicy.idleHeartbeat)
     }
 
     // MARK: Minimum spacing

@@ -78,16 +78,26 @@ history chart will just be empty.
 
 ### Refresh rate
 
-The usage endpoint enforces an hourly budget, and answers a breach with a `Retry-After`
-measured in tens of minutes — so polling greedily costs far more freshness than it buys.
-UsageBar polls every 60 seconds when a window is above 80%, every 2 minutes while Claude
-Code is active, and every 5 minutes when idle, with a hard 60-second floor between calls
-no matter what triggers them. Worst case is 60 requests an hour.
+The usage endpoint enforces an hourly budget and answers a breach with a `Retry-After`
+measured in tens of minutes, so UsageBar spends a request only when one can actually
+reveal a change, rather than polling on a timer and hoping.
 
-A file watcher on `~/.claude/projects` still triggers a refresh when Claude Code writes,
-but it's subject to the same floor. If the endpoint does rate limit you, the panel shows
-a live countdown and the app sleeps until the penalty expires — including across
-restarts, so quitting and reopening won't re-trip it.
+Your quota moves for exactly two reasons, and both are predictable:
+
+- **You used Claude.** A file watcher on `~/.claude/projects` notices, and the log scan
+  distinguishes real token usage from an unrelated write — a request is spent only when
+  new usage actually landed.
+- **A window reset.** Every window reports its `resets_at`, so the app wakes just after
+  one passes to catch the jump back to 0%.
+
+Everything else is a backstop for usage that never touches this Mac (claude.ai in a
+browser, or a second machine): every 2 minutes while Claude Code is active, every 15
+minutes when idle. A hard 60-second floor applies between calls no matter what triggers
+them, capping the worst case at 60 requests an hour.
+
+If the endpoint does rate limit you, the panel shows a live countdown and the app sleeps
+until the penalty expires — including across restarts, so quitting and reopening won't
+re-trip it.
 
 ## Caveats
 

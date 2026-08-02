@@ -47,11 +47,13 @@ final class AppState: ObservableObject {
             .appendingPathComponent(".claude/projects")
         scanner = UsageHistoryScanner(root: projectsDir)
 
-        // Any write under ~/.claude/projects means Claude Code is active — refresh now.
+        // Quota only moves when tokens are actually spent, so a write alone
+        // isn't enough — only refresh when the scan finds new usage events.
         watcher = DirectoryWatcher(url: projectsDir) { [weak self] in
             Task { @MainActor in
-                self?.lastActivity = Date()
-                self?.refreshNow()
+                guard let self, self.scanHistory() > 0 else { return }
+                self.lastActivity = Date()
+                self.refreshNow()
             }
         }
     }
@@ -126,6 +128,8 @@ final class AppState: ObservableObject {
             backoffUntil = nil
             consecutiveRateLimits = 0
             defaults.removeObject(forKey: Self.backoffKey)
+            // Reset times just changed; re-aim the timer at the next one.
+            scheduleNextPoll()
         } catch UsageClientError.notConfigured {
             errorHint = "Can't read the Claude Code login — is it still signed in?"
         } catch UsageClientError.unauthorized {
@@ -149,10 +153,18 @@ final class AppState: ObservableObject {
         rescanHistoryIfDue()
     }
 
-    func rescanHistoryIfDue(force: Bool = false) {
-        guard force || Date().timeIntervalSince(lastHistoryScan) > 300 else { return }
+    /// Incremental — only reads bytes appended since the last scan, so it's
+    /// cheap enough to run on every file-system event. Returns new event count.
+    @discardableResult
+    func scanHistory() -> Int {
         lastHistoryScan = Date()
         history = scanner.scan()
+        return scanner.newEventsInLastScan
+    }
+
+    func rescanHistoryIfDue(force: Bool = false) {
+        guard force || Date().timeIntervalSince(lastHistoryScan) > 300 else { return }
+        scanHistory()
     }
 
     /// Sleeps until the penalty expires, rather than waking to be refused again.
@@ -171,9 +183,9 @@ final class AppState: ObservableObject {
         if let backoffUntil, backoffUntil > Date() {
             return scheduleWakeUp(after: backoffUntil.timeIntervalSinceNow)
         }
-        let interval = RefreshPolicy.interval(
+        let interval = RefreshPolicy.nextWakeUp(
             lastActivity: lastActivity,
-            maxPercent: windows.map(\.percent).max() ?? 0,
+            resets: windows.compactMap(\.resetsAt),
             now: Date())
         timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: false) { [weak self] _ in
             Task { @MainActor in

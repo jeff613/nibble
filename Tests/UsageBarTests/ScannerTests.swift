@@ -53,6 +53,38 @@ final class ScannerTests: XCTestCase {
         XCTAssertEqual(totals[DayModelKey(day: "2026-08-01", model: "claude-fable-5")]?.output, 8)
     }
 
+    // The refresh scheme spends a network request only when this is > 0,
+    // so a false positive here means wasted quota against the rate limit.
+    func testReportsNewEventCountPerScan() throws {
+        let now = DateParsing.parse("2026-08-01T12:00:00Z")!
+        let url = try write(line(day: "2026-08-01", msg: "a", out: 5) + "\n", to: "s.jsonl")
+        let scanner = UsageHistoryScanner(root: dir, timeZone: utc)
+
+        _ = scanner.scan(now: now)
+        XCTAssertEqual(scanner.newEventsInLastScan, 1)
+
+        // Rescan with nothing appended: no new usage, so no refresh warranted.
+        _ = scanner.scan(now: now)
+        XCTAssertEqual(scanner.newEventsInLastScan, 0)
+
+        let handle = try FileHandle(forWritingTo: url)
+        handle.seekToEndOfFile()
+        handle.write(Data((line(day: "2026-08-01", msg: "b", out: 3) + "\n").utf8))
+        try handle.close()
+
+        _ = scanner.scan(now: now)
+        XCTAssertEqual(scanner.newEventsInLastScan, 1)
+    }
+
+    func testDuplicateEventsDoNotCountAsNew() throws {
+        let now = DateParsing.parse("2026-08-01T12:00:00Z")!
+        let duplicate = line(day: "2026-08-01", msg: "a", out: 5)
+        try write([duplicate, duplicate].joined(separator: "\n"), to: "s.jsonl")
+        let scanner = UsageHistoryScanner(root: dir, timeZone: utc)
+        _ = scanner.scan(now: now)
+        XCTAssertEqual(scanner.newEventsInLastScan, 1)
+    }
+
     func testRescanWithoutChangesIsStable() throws {
         let now = DateParsing.parse("2026-08-01T12:00:00Z")!
         try write(line(day: "2026-08-01", msg: "a", out: 5), to: "s.jsonl")

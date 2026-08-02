@@ -1,0 +1,258 @@
+import SwiftUI
+import Charts
+import ServiceManagement
+import UsageBarCore
+
+struct UsagePanelView: View {
+    @ObservedObject var state: AppState
+
+    var body: some View {
+        Group {
+            if state.needsSetup {
+                SetupView(state: state)
+            } else {
+                DashboardView(state: state)
+            }
+        }
+        .frame(width: 340)
+    }
+}
+
+// MARK: - First run
+
+struct SetupView: View {
+    @ObservedObject var state: AppState
+    @State private var token = ""
+    @State private var error: String?
+    @State private var connecting = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Connect UsageBar").font(.headline)
+
+            Text("UsageBar needs a token from your own Claude subscription. It never reads credentials belonging to other apps.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("1. Run this in a terminal:").font(.caption)
+                HStack {
+                    Text("claude setup-token")
+                        .font(.system(.caption, design: .monospaced))
+                        .textSelection(.enabled)
+                    Spacer()
+                    Button {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString("claude setup-token", forType: .string)
+                    } label: {
+                        Image(systemName: "doc.on.doc")
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Copy command")
+                }
+                .padding(8)
+                .background(Color.secondary.opacity(0.12), in: RoundedRectangle(cornerRadius: 6))
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("2. Paste the token here:").font(.caption)
+                SecureField("sk-ant-…", text: $token)
+                    .textFieldStyle(.roundedBorder)
+                    .onSubmit { connect() }
+            }
+
+            if let error {
+                Label(error, systemImage: "exclamationmark.triangle")
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            HStack {
+                Button("Quit") { NSApp.terminate(nil) }
+                Spacer()
+                Button(connecting ? "Connecting…" : "Connect") { connect() }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(connecting || token.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+        }
+        .padding(16)
+    }
+
+    private func connect() {
+        guard !connecting else { return }
+        connecting = true
+        error = nil
+        Task {
+            error = await state.connect(token: token)
+            connecting = false
+            if error == nil { token = "" }
+        }
+    }
+}
+
+// MARK: - Main panel
+
+struct DashboardView: View {
+    @ObservedObject var state: AppState
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Claude Usage").font(.headline)
+
+            if let hint = state.errorHint {
+                Label(hint, systemImage: "exclamationmark.triangle")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            // Countdowns tick every second regardless of polling.
+            TimelineView(.periodic(from: .now, by: 1)) { context in
+                VStack(spacing: 10) {
+                    ForEach(Formatting.sorted(state.windows), id: \.kind) { window in
+                        GaugeRow(window: window, now: context.date)
+                    }
+                }
+            }
+
+            Divider()
+
+            Text("Past 7 days").font(.subheadline).bold()
+            WeekChart(history: state.history)
+
+            HStack {
+                Text("≈ $\(Pricing.totalCost(state.history), specifier: "%.2f") at API prices")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                if let updated = state.lastUpdated {
+                    Text("updated \(updated, style: .relative) ago")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+            }
+
+            Divider()
+
+            HStack {
+                LaunchAtLoginToggle()
+                Spacer()
+                Menu {
+                    Button("Disconnect token…") { state.signOut() }
+                    Button("Quit UsageBar") { NSApp.terminate(nil) }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                }
+                .menuStyle(.borderlessButton)
+                .fixedSize()
+            }
+        }
+        .padding(16)
+    }
+}
+
+struct GaugeRow: View {
+    let window: LimitWindow
+    let now: Date
+
+    var name: String {
+        switch window.kind {
+        case "session": return "Session (5h)"
+        case "weekly_all": return "Weekly · all models"
+        case "weekly_scoped": return "Weekly · \(window.modelName ?? "model")"
+        default: return window.kind
+        }
+    }
+
+    var color: Color {
+        window.percent >= 90 ? .red : window.percent >= 75 ? .orange : .accentColor
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack {
+                Text(name).font(.caption)
+                Spacer()
+                Text("\(Int(window.percent.rounded()))%").font(.caption).bold()
+            }
+            ProgressView(value: min(window.percent, 100), total: 100)
+                .tint(color)
+            if let resets = window.resetsAt {
+                Text(Formatting.countdown(until: resets, now: now))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+}
+
+struct WeekChart: View {
+    let history: [DayModelKey: TokenCounts]
+
+    struct Bar: Identifiable {
+        var id: String { day + model }
+        let day: String
+        let model: String
+        let tokens: Int
+    }
+
+    var bars: [Bar] {
+        history
+            .map { key, counts in
+                Bar(day: String(key.day.suffix(5)),
+                    model: Self.shortModel(key.model),
+                    tokens: counts.total)
+            }
+            .sorted { $0.day < $1.day }
+    }
+
+    static func shortModel(_ id: String) -> String {
+        for name in ["fable", "mythos", "opus", "sonnet", "haiku"] where id.contains(name) {
+            return name
+        }
+        return "other"
+    }
+
+    var body: some View {
+        if bars.isEmpty {
+            Text("No local Claude Code logs found in ~/.claude/projects.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .frame(height: 100)
+        } else {
+            Chart(bars) { bar in
+                BarMark(x: .value("Day", bar.day),
+                        y: .value("Tokens", bar.tokens))
+                    .foregroundStyle(by: .value("Model", bar.model))
+            }
+            .chartLegend(position: .bottom, spacing: 4)
+            .frame(height: 120)
+        }
+    }
+}
+
+struct LaunchAtLoginToggle: View {
+    @State private var enabled = SMAppService.mainApp.status == .enabled
+    @State private var failed = false
+
+    var body: some View {
+        Toggle("Launch at login", isOn: $enabled)
+            .font(.caption)
+            .toggleStyle(.checkbox)
+            .onChange(of: enabled) { _, on in
+                do {
+                    if on { try SMAppService.mainApp.register() }
+                    else { try SMAppService.mainApp.unregister() }
+                    failed = false
+                } catch {
+                    failed = true
+                    enabled = false
+                }
+            }
+            .help(failed
+                  ? "Only works when running from UsageBar.app"
+                  : "Start UsageBar automatically at login")
+    }
+}

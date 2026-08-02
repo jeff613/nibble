@@ -1,6 +1,7 @@
 import Foundation
 
 public enum UsageClientError: Error {
+    case notConfigured
     case unauthorized
     case badStatus(Int)
 }
@@ -9,22 +10,25 @@ public final class ClaudeUsageClient {
     static let endpoint = URL(string: "https://api.anthropic.com/api/oauth/usage")!
 
     let session: URLSession
-    let tokenProvider: () throws -> String
+    let tokenProvider: () -> String?
 
-    public init(session: URLSession = .shared, tokenProvider: @escaping () throws -> String) {
+    public init(session: URLSession = .shared, tokenProvider: @escaping () -> String?) {
         self.session = session
         self.tokenProvider = tokenProvider
     }
 
     public func fetchUsage() async throws -> [LimitWindow] {
-        let first = try await request(token: tokenProvider())
-        if first.status == 401 {
-            // The token may have rotated since we read it — re-read once and retry.
-            let second = try await request(token: tokenProvider())
-            guard second.status != 401 else { throw UsageClientError.unauthorized }
-            return try handle(second)
-        }
-        return try handle(first)
+        guard let token = tokenProvider() else { throw UsageClientError.notConfigured }
+        let response = try await request(token: token)
+        guard response.status != 401 else { throw UsageClientError.unauthorized }
+        return try handle(response)
+    }
+
+    /// Validates a token the user just pasted, without storing it.
+    public func validate(token: String) async throws -> [LimitWindow] {
+        let response = try await request(token: token)
+        guard response.status != 401 else { throw UsageClientError.unauthorized }
+        return try handle(response)
     }
 
     private func request(token: String) async throws -> (status: Int, data: Data) {

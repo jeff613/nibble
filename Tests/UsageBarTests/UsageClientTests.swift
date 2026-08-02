@@ -22,13 +22,10 @@ final class StubProtocol: URLProtocol {
 }
 
 final class UsageClientTests: XCTestCase {
-    func makeClient(tokens: [String]) -> ClaudeUsageClient {
+    func makeClient(token: String?) -> ClaudeUsageClient {
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [StubProtocol.self]
-        var remaining = tokens
-        return ClaudeUsageClient(session: URLSession(configuration: config)) {
-            remaining.isEmpty ? tokens.last! : remaining.removeFirst()
-        }
+        return ClaudeUsageClient(session: URLSession(configuration: config)) { token }
     }
 
     override func setUp() {
@@ -36,27 +33,62 @@ final class UsageClientTests: XCTestCase {
         StubProtocol.seenAuthHeaders = []
     }
 
-    func testFetchParsesWindows() async throws {
+    func testFetchParsesWindowsAndSendsBearerToken() async throws {
         StubProtocol.responses = [(200, UsageDecodingTests.fixture)]
-        let windows = try await makeClient(tokens: ["tok1"]).fetchUsage()
+        let windows = try await makeClient(token: "tok1").fetchUsage()
         XCTAssertEqual(windows.count, 3)
         XCTAssertEqual(StubProtocol.seenAuthHeaders, ["Bearer tok1"])
     }
 
-    func testRetriesOnceOn401WithFreshToken() async throws {
-        StubProtocol.responses = [(401, Data()), (200, UsageDecodingTests.fixture)]
-        let windows = try await makeClient(tokens: ["stale", "fresh"]).fetchUsage()
-        XCTAssertEqual(windows.count, 3)
-        XCTAssertEqual(StubProtocol.seenAuthHeaders, ["Bearer stale", "Bearer fresh"])
+    func testThrowsNotConfiguredWithoutToken() async {
+        do {
+            _ = try await makeClient(token: nil).fetchUsage()
+            XCTFail("should throw")
+        } catch UsageClientError.notConfigured {
+            XCTAssertTrue(StubProtocol.seenAuthHeaders.isEmpty, "must not hit the network")
+        } catch {
+            XCTFail("wrong error \(error)")
+        }
     }
 
-    func testThrowsUnauthorizedAfterSecond401() async {
-        StubProtocol.responses = [(401, Data()), (401, Data())]
+    func testThrowsUnauthorizedOn401() async {
+        StubProtocol.responses = [(401, Data())]
         do {
-            _ = try await makeClient(tokens: ["a", "b"]).fetchUsage()
+            _ = try await makeClient(token: "expired").fetchUsage()
             XCTFail("should throw")
-        } catch let e as UsageClientError {
-            guard case .unauthorized = e else { return XCTFail("wrong error \(e)") }
+        } catch UsageClientError.unauthorized {
+            // expected
+        } catch {
+            XCTFail("wrong error \(error)")
+        }
+    }
+
+    func testThrowsBadStatusOnServerError() async {
+        StubProtocol.responses = [(503, Data())]
+        do {
+            _ = try await makeClient(token: "tok").fetchUsage()
+            XCTFail("should throw")
+        } catch UsageClientError.badStatus(let code) {
+            XCTAssertEqual(code, 503)
+        } catch {
+            XCTFail("wrong error \(error)")
+        }
+    }
+
+    func testValidateUsesSuppliedTokenNotStoredOne() async throws {
+        StubProtocol.responses = [(200, UsageDecodingTests.fixture)]
+        let windows = try await makeClient(token: nil).validate(token: "pasted")
+        XCTAssertEqual(windows.count, 3)
+        XCTAssertEqual(StubProtocol.seenAuthHeaders, ["Bearer pasted"])
+    }
+
+    func testValidateRejectsBadToken() async {
+        StubProtocol.responses = [(401, Data())]
+        do {
+            _ = try await makeClient(token: nil).validate(token: "junk")
+            XCTFail("should throw")
+        } catch UsageClientError.unauthorized {
+            // expected
         } catch {
             XCTFail("wrong error \(error)")
         }

@@ -12,9 +12,9 @@ final class RefreshPolicyTests: XCTestCase {
                        RefreshPolicy.activeInterval)
     }
 
-    func testActiveWhenNearLimit() {
+    func testNearLimitPollsFastestEvenWhenIdle() {
         XCTAssertEqual(RefreshPolicy.interval(lastActivity: nil, maxPercent: 88, now: now),
-                       RefreshPolicy.activeInterval)
+                       RefreshPolicy.nearLimitInterval)
     }
 
     func testIdleOtherwise() {
@@ -25,8 +25,17 @@ final class RefreshPolicyTests: XCTestCase {
                        RefreshPolicy.idleInterval)
     }
 
-    func testActiveIntervalNeverBeatsTheFloor() {
-        XCTAssertGreaterThanOrEqual(RefreshPolicy.activeInterval, RefreshPolicy.minimumSpacing)
+    func testNoIntervalBeatsTheFloor() {
+        for interval in [RefreshPolicy.nearLimitInterval,
+                         RefreshPolicy.activeInterval,
+                         RefreshPolicy.idleInterval] {
+            XCTAssertGreaterThanOrEqual(interval, RefreshPolicy.minimumSpacing)
+        }
+    }
+
+    func testWorstCaseStaysUnderSixtyRequestsPerHour() {
+        let fastest = min(RefreshPolicy.nearLimitInterval, RefreshPolicy.minimumSpacing)
+        XCTAssertLessThanOrEqual(3600 / fastest, 60)
     }
 
     // MARK: Minimum spacing
@@ -52,21 +61,27 @@ final class RefreshPolicyTests: XCTestCase {
         XCTAssertEqual(RefreshPolicy.backoff(consecutiveRateLimits: 5, retryAfter: 30), 30)
     }
 
-    func testBackoffCapsAbsurdRetryAfter() {
-        XCTAssertEqual(RefreshPolicy.backoff(consecutiveRateLimits: 1, retryAfter: 99999), 900)
+    /// Observed in the wild: the endpoint returned `Retry-After: 1985`.
+    /// Clamping that low would retry early and re-trip the limit.
+    func testBackoffHonoursLongRetryAfterInFull() {
+        XCTAssertEqual(RefreshPolicy.backoff(consecutiveRateLimits: 1, retryAfter: 1985), 1985)
+    }
+
+    func testBackoffCapsAbsurdRetryAfterAtTwoHours() {
+        XCTAssertEqual(RefreshPolicy.backoff(consecutiveRateLimits: 1, retryAfter: 99999), 7200)
     }
 
     func testBackoffIgnoresNonPositiveRetryAfter() {
-        XCTAssertEqual(RefreshPolicy.backoff(consecutiveRateLimits: 1, retryAfter: 0), 60)
+        XCTAssertEqual(RefreshPolicy.backoff(consecutiveRateLimits: 1, retryAfter: 0), 300)
     }
 
     func testBackoffDoublesWithoutHeader() {
-        XCTAssertEqual(RefreshPolicy.backoff(consecutiveRateLimits: 1, retryAfter: nil), 60)
-        XCTAssertEqual(RefreshPolicy.backoff(consecutiveRateLimits: 2, retryAfter: nil), 120)
-        XCTAssertEqual(RefreshPolicy.backoff(consecutiveRateLimits: 3, retryAfter: nil), 240)
+        XCTAssertEqual(RefreshPolicy.backoff(consecutiveRateLimits: 1, retryAfter: nil), 300)
+        XCTAssertEqual(RefreshPolicy.backoff(consecutiveRateLimits: 2, retryAfter: nil), 600)
+        XCTAssertEqual(RefreshPolicy.backoff(consecutiveRateLimits: 3, retryAfter: nil), 1200)
     }
 
-    func testBackoffIsCapped() {
-        XCTAssertEqual(RefreshPolicy.backoff(consecutiveRateLimits: 50, retryAfter: nil), 600)
+    func testBackoffIsCappedAtAnHour() {
+        XCTAssertEqual(RefreshPolicy.backoff(consecutiveRateLimits: 50, retryAfter: nil), 3600)
     }
 }

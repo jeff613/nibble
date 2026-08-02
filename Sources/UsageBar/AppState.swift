@@ -7,12 +7,16 @@ final class AppState: ObservableObject {
     /// Set once the user has explicitly connected. The token itself is never
     /// copied — only this flag is persisted, and the credential is read live.
     private static let consentKey = "hasConnectedClaudeCodeLogin"
+    /// Persisted so quitting and relaunching during a penalty doesn't re-trip it.
+    private static let backoffKey = "rateLimitBackoffUntil"
 
     @Published var windows: [LimitWindow] = []
     @Published var history: [DayModelKey: TokenCounts] = [:]
     @Published var lastUpdated: Date?
     @Published var errorHint: String?
     @Published var needsSetup: Bool
+    /// Non-nil while rate limited; the panel renders a live countdown to it.
+    @Published var backoffUntil: Date?
 
     private let credentials = ClaudeCodeCredentials()
     private let defaults: UserDefaults
@@ -23,7 +27,6 @@ final class AppState: ObservableObject {
     private var lastActivity: Date?
     private var lastHistoryScan = Date.distantPast
     private var lastFetch: Date?
-    private var backoffUntil: Date?
     private var consecutiveRateLimits = 0
     private var inFlight = false
 
@@ -32,6 +35,13 @@ final class AppState: ObservableObject {
         let credentials = self.credentials
         client = ClaudeUsageClient { try? credentials.readToken() }
         needsSetup = !defaults.bool(forKey: Self.consentKey)
+
+        // Resume any penalty that was still running when we last quit.
+        if let stored = defaults.object(forKey: Self.backoffKey) as? Date, stored > Date() {
+            backoffUntil = stored
+        } else {
+            defaults.removeObject(forKey: Self.backoffKey)
+        }
 
         let projectsDir = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".claude/projects")
@@ -115,6 +125,7 @@ final class AppState: ObservableObject {
             errorHint = nil
             backoffUntil = nil
             consecutiveRateLimits = 0
+            defaults.removeObject(forKey: Self.backoffKey)
         } catch UsageClientError.notConfigured {
             errorHint = "Can't read the Claude Code login — is it still signed in?"
         } catch UsageClientError.unauthorized {
@@ -123,8 +134,11 @@ final class AppState: ObservableObject {
             consecutiveRateLimits += 1
             let wait = RefreshPolicy.backoff(
                 consecutiveRateLimits: consecutiveRateLimits, retryAfter: retryAfter)
-            backoffUntil = Date().addingTimeInterval(wait)
-            errorHint = "Rate limited by Anthropic — retrying in \(Int(wait / 60) > 0 ? "\(Int(wait / 60))m" : "\(Int(wait))s")."
+            let until = Date().addingTimeInterval(wait)
+            backoffUntil = until
+            defaults.set(until, forKey: Self.backoffKey)
+            errorHint = nil  // the panel shows a live countdown instead
+            scheduleWakeUp(after: wait)
         } catch UsageClientError.badStatus(let code) {
             errorHint = "Anthropic returned HTTP \(code) — showing last known data."
         } catch let error as URLError where error.code == .notConnectedToInternet {
@@ -141,8 +155,22 @@ final class AppState: ObservableObject {
         history = scanner.scan()
     }
 
+    /// Sleeps until the penalty expires, rather than waking to be refused again.
+    private func scheduleWakeUp(after seconds: TimeInterval) {
+        timer?.invalidate()
+        timer = Timer.scheduledTimer(withTimeInterval: seconds + 1, repeats: false) { [weak self] _ in
+            Task { @MainActor in
+                self?.refreshNow()
+                self?.scheduleNextPoll()
+            }
+        }
+    }
+
     private func scheduleNextPoll() {
         timer?.invalidate()
+        if let backoffUntil, backoffUntil > Date() {
+            return scheduleWakeUp(after: backoffUntil.timeIntervalSinceNow)
+        }
         let interval = RefreshPolicy.interval(
             lastActivity: lastActivity,
             maxPercent: windows.map(\.percent).max() ?? 0,

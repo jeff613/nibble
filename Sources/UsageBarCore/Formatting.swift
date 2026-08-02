@@ -52,6 +52,18 @@ public enum Formatting {
             : String(format: "%.1f%@", rounded, suffix)
     }
 
+    /// Human duration for short waits: "45s", "12m", "1h 5m".
+    public static func duration(_ seconds: TimeInterval) -> String {
+        guard seconds > 0 else { return "0s" }
+        let total = Int(seconds.rounded())
+        if total < 60 { return "\(total)s" }
+        let minutes = total / 60
+        if minutes < 60 { return "\(minutes)m" }
+        let hours = minutes / 60
+        let remainder = minutes % 60
+        return remainder == 0 ? "\(hours)h" : "\(hours)h \(remainder)m"
+    }
+
     public static func countdown(until: Date, now: Date) -> String {
         let seconds = until.timeIntervalSince(now)
         guard seconds > 0 else { return "resetting…" }

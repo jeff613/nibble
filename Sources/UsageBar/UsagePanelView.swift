@@ -91,7 +91,15 @@ struct DashboardView: View {
 
             // Countdowns tick every second regardless of polling.
             TimelineView(.periodic(from: .now, by: 1)) { context in
-                VStack(spacing: 10) {
+                VStack(alignment: .leading, spacing: 10) {
+                    if let until = state.backoffUntil, until > context.date {
+                        Label(
+                            "Rate limited by Anthropic — resuming in \(Formatting.duration(until.timeIntervalSince(context.date))). Numbers below may be stale.",
+                            systemImage: "clock.badge.exclamationmark")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                     ForEach(Formatting.sorted(state.windows), id: \.kind) { window in
                         GaugeRow(window: window, now: context.date)
                     }

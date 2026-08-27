@@ -4,8 +4,7 @@ import XCTest
 /// End-to-end check against the real Claude Code login and the real usage endpoint.
 ///
 /// Skipped unless `NIBBLE_INTEGRATION=1` is set, because it needs a signed-in
-/// Claude Code, network access, and (on first run) approval of a macOS Keychain
-/// prompt. Run it with:
+/// Claude Code and network access. Run it with:
 ///
 ///     NIBBLE_INTEGRATION=1 make test
 ///
@@ -26,7 +25,7 @@ final class LiveIntegrationTests: XCTestCase {
         }
         XCTAssertFalse(token.isEmpty)
 
-        let client = ClaudeUsageClient { token }
+        let client = ClaudeUsageClient { reload in try credentials.readToken(reload: reload) }
         let windows = try await client.fetchUsage()
 
         XCTAssertFalse(windows.isEmpty, "expected at least one limit window")

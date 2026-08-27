@@ -17,6 +17,11 @@ final class AppState: ObservableObject {
     @Published var needsSetup: Bool
     /// Non-nil while rate limited; the panel renders a live countdown to it.
     @Published var backoffUntil: Date?
+    /// Set when the keychain read is refused (a locked login keychain).
+    /// Polling stops while it is true — retrying in the background can't
+    /// succeed and would spam unlock dialogs. Cleared only by opening the
+    /// panel.
+    @Published private(set) var accessDenied = false
 
     private let credentials = ClaudeCodeCredentials()
     private let defaults: UserDefaults
@@ -33,7 +38,7 @@ final class AppState: ObservableObject {
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         let credentials = self.credentials
-        client = ClaudeUsageClient { try? credentials.readToken() }
+        client = ClaudeUsageClient { try credentials.readToken(reload: $0) }
         needsSetup = !defaults.bool(forKey: Self.consentKey)
 
         // Resume any penalty that was still running when we last quit.
@@ -66,7 +71,7 @@ final class AppState: ObservableObject {
     /// Requests a refresh. Coalesced: ignored while a request is in flight,
     /// inside the minimum spacing window, or while backing off from a 429.
     func refreshNow(force: Bool = false) {
-        guard !needsSetup, !inFlight else { return }
+        guard !needsSetup, !inFlight, !accessDenied else { return }
         let now = Date()
         if !force {
             if let backoffUntil, now < backoffUntil { return }
@@ -107,6 +112,19 @@ final class AppState: ObservableObject {
         }
     }
 
+    /// Opening the panel is an explicit user action, so it is allowed to ask
+    /// for keychain access once more after a denial — and it is the only thing
+    /// that resumes polling, short of relaunching.
+    func panelOpened() {
+        if accessDenied {
+            accessDenied = false
+            errorHint = nil
+            scheduleNextPoll()
+        }
+        refreshNow()
+        rescanHistoryIfDue(force: true)
+    }
+
     func disconnect() {
         defaults.set(false, forKey: Self.consentKey)
         windows = []
@@ -130,7 +148,14 @@ final class AppState: ObservableObject {
             defaults.removeObject(forKey: Self.backoffKey)
             // Reset times just changed; re-aim the timer at the next one.
             scheduleNextPoll()
-        } catch UsageClientError.notConfigured {
+        } catch ClaudeCodeCredentials.LookupError.accessDenied {
+            // Kill the timer this refresh was scheduled from: it re-arms itself
+            // before we get here, so leaving it running would keep retrying a
+            // read that can't succeed.
+            accessDenied = true
+            errorHint = ClaudeCodeCredentials.LookupError.accessDenied.errorDescription
+            timer?.invalidate()
+        } catch ClaudeCodeCredentials.LookupError.notSignedIn {
             errorHint = "Can't read the Claude Code login — is it still signed in?"
         } catch UsageClientError.unauthorized {
             errorHint = "Login expired — run `claude` and sign in again."
@@ -180,6 +205,7 @@ final class AppState: ObservableObject {
 
     private func scheduleNextPoll() {
         timer?.invalidate()
+        guard !accessDenied else { return }
         if let backoffUntil, backoffUntil > Date() {
             return scheduleWakeUp(after: backoffUntil.timeIntervalSinceNow)
         }

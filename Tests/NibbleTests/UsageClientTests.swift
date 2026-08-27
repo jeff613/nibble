@@ -23,10 +23,16 @@ final class StubProtocol: URLProtocol {
 }
 
 final class UsageClientTests: XCTestCase {
-    func makeClient(token: String?) -> ClaudeUsageClient {
+    func makeClient(token: String) -> ClaudeUsageClient {
+        makeClient { _ in token }
+    }
+
+    func makeClient(
+        _ provider: @escaping (_ reload: Bool) throws -> String
+    ) -> ClaudeUsageClient {
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [StubProtocol.self]
-        return ClaudeUsageClient(session: URLSession(configuration: config)) { token }
+        return ClaudeUsageClient(session: URLSession(configuration: config), tokenProvider: provider)
     }
 
     override func setUp() {
@@ -42,11 +48,12 @@ final class UsageClientTests: XCTestCase {
         XCTAssertEqual(StubProtocol.seenAuthHeaders, ["Bearer tok1"])
     }
 
-    func testThrowsNotConfiguredWithoutToken() async {
+    func testPropagatesLookupFailureWithoutHittingNetwork() async {
+        let client = makeClient { _ in throw ClaudeCodeCredentials.LookupError.accessDenied }
         do {
-            _ = try await makeClient(token: nil).fetchUsage()
+            _ = try await client.fetchUsage()
             XCTFail("should throw")
-        } catch UsageClientError.notConfigured {
+        } catch ClaudeCodeCredentials.LookupError.accessDenied {
             XCTAssertTrue(StubProtocol.seenAuthHeaders.isEmpty, "must not hit the network")
         } catch {
             XCTFail("wrong error \(error)")
@@ -59,7 +66,29 @@ final class UsageClientTests: XCTestCase {
             _ = try await makeClient(token: "expired").fetchUsage()
             XCTFail("should throw")
         } catch UsageClientError.unauthorized {
-            // expected
+            // The token never changes, so there is nothing to retry with.
+            XCTAssertEqual(StubProtocol.seenAuthHeaders, ["Bearer expired"])
+        } catch {
+            XCTFail("wrong error \(error)")
+        }
+    }
+
+    func testRetriesOnceWithRotatedTokenAfter401() async throws {
+        StubProtocol.responses = [(401, Data()), (200, UsageDecodingTests.fixture)]
+        let client = makeClient { reload in reload ? "rotated" : "stale" }
+        let windows = try await client.fetchUsage()
+        XCTAssertEqual(windows.count, 3)
+        XCTAssertEqual(StubProtocol.seenAuthHeaders, ["Bearer stale", "Bearer rotated"])
+    }
+
+    func testRetriedRequestStillFailingReportsUnauthorized() async {
+        StubProtocol.responses = [(401, Data()), (401, Data())]
+        let client = makeClient { reload in reload ? "rotated" : "stale" }
+        do {
+            _ = try await client.fetchUsage()
+            XCTFail("should throw")
+        } catch UsageClientError.unauthorized {
+            XCTAssertEqual(StubProtocol.seenAuthHeaders.count, 2, "must not retry forever")
         } catch {
             XCTFail("wrong error \(error)")
         }

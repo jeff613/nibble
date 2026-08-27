@@ -1,27 +1,31 @@
 import Foundation
-import Security
 
 /// Reads the OAuth token Claude Code stores on this Mac.
 ///
-/// Nibble only does this after the user explicitly asks it to, and macOS shows
-/// its own permission prompt the first time. Nothing is copied: the token is read
-/// live on each request, so it stays fresh as Claude Code rotates it, and Nibble
-/// never writes, refreshes, or persists a credential of its own.
-public struct ClaudeCodeCredentials {
+/// Nibble only does this after the user explicitly asks it to. The read goes
+/// through Apple's `security` tool rather than the Security framework: Claude
+/// Code writes the item with that same tool, so its ACL already trusts it, and
+/// the read is silent. Calling `SecItemCopyMatching` ourselves put Nibble's own
+/// ad-hoc signature in front of the ACL instead, which meant a macOS approval
+/// prompt after every rebuild and every token rotation — grants could never
+/// stick. Nothing is persisted: the token is held in memory for the life of
+/// the process and re-read when the server rejects it, so it follows Claude
+/// Code's rotation without Nibble ever writing, refreshing, or storing a
+/// credential of its own.
+public final class ClaudeCodeCredentials {
     public enum LookupError: Error, LocalizedError, Equatable {
         case notSignedIn
         case accessDenied
-        case keychain(OSStatus)
+        case keychain(Int32)
 
         public var errorDescription: String? {
             switch self {
             case .notSignedIn:
                 return "No Claude Code login found on this Mac. Run `claude` and sign in first."
             case .accessDenied:
-                return "macOS denied access to the Claude Code login. Approve the prompt, or allow Nibble in Keychain Access."
-            case .keychain(let status):
-                let detail = SecCopyErrorMessageString(status, nil) as String? ?? "status \(status)"
-                return "Keychain error: \(detail)"
+                return "The login keychain is locked. Unlock it in Keychain Access and try again."
+            case .keychain(let code):
+                return "Keychain read failed (security exited with code \(code))."
             }
         }
     }
@@ -30,14 +34,22 @@ public struct ClaudeCodeCredentials {
 
     let fallbackURL: URL
     let useKeychain: Bool
+    let securityTool: URL
+
+    /// Guards `cached`, and incidentally keeps two concurrent reads from
+    /// spawning two processes.
+    private let lock = NSLock()
+    private var cached: String?
 
     public init(
         fallbackURL: URL = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".claude/.credentials.json"),
-        useKeychain: Bool = true
+        useKeychain: Bool = true,
+        securityTool: URL = URL(fileURLWithPath: "/usr/bin/security")
     ) {
         self.fallbackURL = fallbackURL
         self.useKeychain = useKeychain
+        self.securityTool = securityTool
     }
 
     /// Extracts the access token from Claude Code's credential JSON.
@@ -47,7 +59,19 @@ public struct ClaudeCodeCredentials {
         return (token?.isEmpty ?? true) ? nil : token
     }
 
-    public func readToken() throws -> String {
+    /// The token, read once and then remembered, so each poll doesn't spawn
+    /// a process. Pass `reload: true` after a 401 to pick up a token Claude
+    /// Code has rotated underneath us.
+    public func readToken(reload: Bool = false) throws -> String {
+        lock.lock()
+        defer { lock.unlock() }
+        if !reload, let cached { return cached }
+        let token = try load()
+        cached = token
+        return token
+    }
+
+    private func load() throws -> String {
         if useKeychain {
             switch keychainToken() {
             case .success(let token):
@@ -66,28 +90,35 @@ public struct ClaudeCodeCredentials {
     }
 
     private func keychainToken() -> Result<String, LookupError> {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: Self.keychainService,
-            kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne,
-        ]
-        var result: AnyObject?
-        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        let process = Process()
+        process.executableURL = securityTool
+        process.arguments = ["find-generic-password", "-s", Self.keychainService, "-w"]
+        let stdout = Pipe()
+        process.standardOutput = stdout
+        process.standardError = FileHandle.nullDevice
+        do {
+            try process.run()
+        } catch {
+            return .failure(.keychain(-1))
+        }
+        let data = stdout.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
 
-        switch status {
-        case errSecSuccess:
-            guard let data = result as? Data,
-                  let token = Self.accessToken(fromJSON: data) else {
+        // The tool exits with the OSStatus truncated to a byte:
+        // -25300 errSecItemNotFound → 44, -25308 errSecInteractionNotAllowed
+        // → 36, -25293 errSecAuthFailed → 51, -128 errSecUserCanceled → 128.
+        switch process.terminationStatus {
+        case 0:
+            guard let token = Self.accessToken(fromJSON: data) else {
                 return .failure(.notSignedIn)
             }
             return .success(token)
-        case errSecItemNotFound:
+        case 44:
             return .failure(.notSignedIn)
-        case errSecUserCanceled, errSecAuthFailed, errSecInteractionNotAllowed:
+        case 36, 51, 128:
             return .failure(.accessDenied)
         default:
-            return .failure(.keychain(status))
+            return .failure(.keychain(process.terminationStatus))
         }
     }
 }

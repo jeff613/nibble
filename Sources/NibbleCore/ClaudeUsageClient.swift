@@ -1,7 +1,6 @@
 import Foundation
 
 public enum UsageClientError: Error, Equatable {
-    case notConfigured
     case unauthorized
     /// HTTP 429. `retryAfter` carries the server's `Retry-After` header when present.
     case rateLimited(retryAfter: TimeInterval?)
@@ -12,16 +11,28 @@ public final class ClaudeUsageClient {
     static let endpoint = URL(string: "https://api.anthropic.com/api/oauth/usage")!
 
     let session: URLSession
-    let tokenProvider: () -> String?
+    /// Throws rather than returning nil so the reason a token is unavailable —
+    /// notably a locked keychain — reaches the caller intact.
+    let tokenProvider: (_ reload: Bool) throws -> String
 
-    public init(session: URLSession = .shared, tokenProvider: @escaping () -> String?) {
+    public init(
+        session: URLSession = .shared,
+        tokenProvider: @escaping (_ reload: Bool) throws -> String
+    ) {
         self.session = session
         self.tokenProvider = tokenProvider
     }
 
     public func fetchUsage() async throws -> [LimitWindow] {
-        guard let token = tokenProvider() else { throw UsageClientError.notConfigured }
-        let response = try await request(token: token)
+        let token = try tokenProvider(false)
+        var response = try await request(token: token)
+
+        // A token Claude Code rotated looks exactly like an expired one from
+        // here, so spend one retry on a fresh read before reporting failure.
+        if response.status == 401 {
+            let fresh = try tokenProvider(true)
+            if fresh != token { response = try await request(token: fresh) }
+        }
 
         switch response.status {
         case 200:

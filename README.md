@@ -44,17 +44,18 @@ only have to do this once.
 
 ## Connecting your account
 
-Click the menu-bar item, then click **Use my Claude Code login**. macOS will ask you to
-approve access to the Claude login stored on your Mac; approve it and the gauges fill in.
+Click the menu-bar item, then click **Use my Claude Code login** — the gauges fill in.
 
 ### What this means, precisely
 
 Nibble reads the OAuth token that Claude Code has already stored on this machine — in
 your Keychain, or `~/.claude/.credentials.json`. That is the same credential Claude Code
-uses to render its own `/usage` output.
+uses to render its own `/usage` output. The Keychain read goes through Apple's
+`security` tool, the same way Claude Code itself reads and writes the item, so there is
+no separate macOS approval prompt.
 
-- **Nothing is read until you click that button.** The macOS permission prompt is the
-  consent gate, and you can revoke it later in Keychain Access.
+- **Nothing is read until you click that button.** That click is the consent gate, and
+  **Disconnect** withdraws it.
 - **The token is never copied.** It's read fresh on each check, so it stays valid as
   Claude Code rotates it. The only thing Nibble persists is a boolean recording that
   you connected.
@@ -75,8 +76,8 @@ The other option is a browser login flow, which this project deliberately doesn'
 Anthropic offers no public OAuth client registration for subscriptions, so any
 third-party app doing that must reuse Claude Code's client ID — meaning you'd approve a
 consent screen naming Claude Code for software Anthropic didn't write. Reading a
-credential you already chose to store, behind an OS-level prompt, is the more honest of
-the two.
+credential you already chose to store, behind an explicit in-app consent step, is the
+more honest of the two.
 
 ## What it reads
 

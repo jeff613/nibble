@@ -56,8 +56,7 @@ final class StatusItemController {
         if popover.isShown {
             popover.performClose(nil)
         } else if let button = statusItem.button {
-            state.refreshNow()
-            state.rescanHistoryIfDue(force: true)
+            state.panelOpened()
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
             popover.contentViewController?.view.window?.makeKey()
         }

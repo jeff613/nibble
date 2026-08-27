@@ -29,7 +29,7 @@ struct SetupView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Connect Nibble").font(.headline)
 
-            Text("Nibble reads the Claude login already stored on this Mac by Claude Code. macOS will ask you to approve — nothing is read until you do.")
+            Text("Nibble reads the Claude login already stored on this Mac by Claude Code. Nothing is read until you click the button below.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

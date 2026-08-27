@@ -52,8 +52,18 @@ final class FormattingTests: XCTestCase {
     func testCountdown() {
         let now = Date(timeIntervalSince1970: 0)
         XCTAssertEqual(Formatting.countdown(until: now.addingTimeInterval(2 * 3600 + 14 * 60), now: now), "resets in 2h 14m")
+        XCTAssertEqual(Formatting.countdown(until: now.addingTimeInterval(23 * 3600 + 59 * 60), now: now), "resets in 23h 59m")
         XCTAssertEqual(Formatting.countdown(until: now.addingTimeInterval(14 * 60), now: now), "resets in 14m")
         XCTAssertEqual(Formatting.countdown(until: now.addingTimeInterval(30), now: now), "resets in <1m")
         XCTAssertEqual(Formatting.countdown(until: now.addingTimeInterval(-5), now: now), "resetting…")
+    }
+
+    /// Weekly windows run to ~168h, which reads as noise in hours.
+    func testCountdownSwitchesToDaysPastOneDay() {
+        let now = Date(timeIntervalSince1970: 0)
+        XCTAssertEqual(Formatting.countdown(until: now.addingTimeInterval(113 * 3600 + 48 * 60), now: now), "resets in 4d 17h")
+        XCTAssertEqual(Formatting.countdown(until: now.addingTimeInterval(24 * 3600), now: now), "resets in 1d")
+        XCTAssertEqual(Formatting.countdown(until: now.addingTimeInterval(24 * 3600 + 30 * 60), now: now), "resets in 1d")
+        XCTAssertEqual(Formatting.countdown(until: now.addingTimeInterval(6 * 24 * 3600 + 23 * 3600), now: now), "resets in 6d 23h")
     }
 }

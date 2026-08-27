@@ -70,6 +70,14 @@ public enum Formatting {
         let minutes = Int(seconds / 60)
         if minutes < 1 { return "resets in <1m" }
         let hours = minutes / 60
+        // Weekly windows run to ~168h; minutes are noise at that scale.
+        if hours >= 24 {
+            let days = hours / 24
+            let remainder = hours % 24
+            return remainder == 0
+                ? "resets in \(days)d"
+                : "resets in \(days)d \(remainder)h"
+        }
         let remainder = minutes % 60
         return hours > 0 ? "resets in \(hours)h \(remainder)m" : "resets in \(remainder)m"
     }

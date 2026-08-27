@@ -49,7 +49,7 @@ public final class UsageHistoryScanner {
         }
 
         // Day keys are zero-padded yyyy-MM-dd, so string comparison orders them correctly.
-        let minDay = UsageAggregator.dayKey(for: now.addingTimeInterval(-6 * 86400), timeZone: timeZone)
+        let minDay = UsageAggregator.lastSevenDays(endingOn: now, timeZone: timeZone)[0]
         return totals.filter { $0.key.day >= minDay }
     }
 }

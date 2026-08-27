@@ -187,14 +187,14 @@ struct WeekChart: View {
         let tokens: Int
     }
 
+    var days: [String] {
+        UsageAggregator.lastSevenDays(endingOn: Date(), timeZone: .current)
+    }
+
     var bars: [Bar] {
-        history
-            .map { key, counts in
-                Bar(day: String(key.day.suffix(5)),
-                    model: ModelPalette.family(for: key.model),
-                    tokens: counts.total)
-            }
-            .sorted { $0.day < $1.day }
+        UsageAggregator.dayFamilyTotals(history, days: days).map {
+            Bar(day: String($0.day.suffix(5)), model: $0.family, tokens: $0.tokens)
+        }
     }
 
     /// Only the families on screen, in canonical order — colours come from the
@@ -216,6 +216,7 @@ struct WeekChart: View {
                         y: .value("Tokens", bar.tokens))
                     .foregroundStyle(by: .value("Model", bar.model))
             }
+            .chartXScale(domain: days.map { String($0.suffix(5)) })
             .chartForegroundStyleScale(domain: scale.domain, range: scale.range)
             .chartYAxis {
                 AxisMarks { value in

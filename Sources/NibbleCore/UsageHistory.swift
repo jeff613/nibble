@@ -62,12 +62,61 @@ public struct TokenCounts: Equatable, Sendable {
     }
 }
 
+/// One stacked-bar segment: a family's token total for one day.
+public struct DayFamilyTotal: Equatable, Sendable {
+    public let day: String
+    public let family: String
+    public let tokens: Int
+}
+
 public enum UsageAggregator {
+    /// Collapses per-model day totals into per-family chart segments, days
+    /// ascending and families in `ModelPalette` order within each day — the
+    /// source dictionary has no order, and a chart fed from it directly would
+    /// stack each day's bar differently.
+    ///
+    /// When `days` is non-empty, missing dates are kept as 0-token segments so
+    /// a 7-day chart does not skip a column. An empty `totals` stays empty
+    /// (the panel's "no logs" state) rather than rendering a week of zeros.
+    public static func dayFamilyTotals(_ totals: [DayModelKey: TokenCounts],
+                                       days: [String] = []) -> [DayFamilyTotal] {
+        var merged: [DayModelKey: Int] = [:]
+        for (key, counts) in totals {
+            let family = DayModelKey(day: key.day, model: ModelPalette.family(for: key.model))
+            merged[family, default: 0] += counts.total
+        }
+        var segments = merged
+            .map { DayFamilyTotal(day: $0.key.day, family: $0.key.model, tokens: $0.value) }
+        if !segments.isEmpty, !days.isEmpty {
+            let present = Set(segments.map(\.day))
+            let families = Set(segments.map(\.family))
+            let family = ModelPalette.families.first(where: families.contains) ?? "other"
+            for day in days where !present.contains(day) {
+                segments.append(DayFamilyTotal(day: day, family: family, tokens: 0))
+            }
+        }
+        return segments.sorted {
+            ($0.day, ModelPalette.families.firstIndex(of: $0.family) ?? .max)
+                < ($1.day, ModelPalette.families.firstIndex(of: $1.family) ?? .max)
+        }
+    }
+
     public static func dayKey(for date: Date, timeZone: TimeZone) -> String {
         var cal = Calendar(identifier: .gregorian)
         cal.timeZone = timeZone
         let c = cal.dateComponents([.year, .month, .day], from: date)
         return String(format: "%04d-%02d-%02d", c.year!, c.month!, c.day!)
+    }
+
+    /// The 7 local calendar days ending on `date`, oldest first (`yyyy-MM-dd`).
+    public static func lastSevenDays(endingOn date: Date, timeZone: TimeZone) -> [String] {
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = timeZone
+        let start = cal.startOfDay(for: date)
+        return (0..<7).map { offset in
+            let day = cal.date(byAdding: .day, value: offset - 6, to: start)!
+            return dayKey(for: day, timeZone: timeZone)
+        }
     }
 
     /// Folds events into `totals`, skipping ones already seen.

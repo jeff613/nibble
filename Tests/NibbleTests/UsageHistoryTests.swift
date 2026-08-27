@@ -2,6 +2,7 @@ import XCTest
 @testable import NibbleCore
 
 final class UsageHistoryTests: XCTestCase {
+    let utc = TimeZone(identifier: "UTC")!
     let assistantLine = #"{"type":"assistant","timestamp":"2026-08-01T10:00:00.000Z","requestId":"req_1","message":{"id":"msg_1","model":"claude-fable-5","usage":{"input_tokens":10,"output_tokens":20,"cache_creation_input_tokens":100,"cache_read_input_tokens":1000}}}"#
 
     func testParsesAssistantLine() throws {
@@ -32,9 +33,86 @@ final class UsageHistoryTests: XCTestCase {
         XCTAssertEqual(totals.count, 1)
     }
 
+    func testDayFamilyTotalsStackInCanonicalOrderEveryDay() {
+        var counts = TokenCounts()
+        counts.input = 1
+        // Insertion order deliberately jumbled: the totals dictionary has no
+        // order, so the output must impose one.
+        let totals: [DayModelKey: TokenCounts] = [
+            DayModelKey(day: "2026-08-05", model: "claude-sonnet-5"): counts,
+            DayModelKey(day: "2026-08-04", model: "claude-opus-5"): counts,
+            DayModelKey(day: "2026-08-05", model: "claude-fable-5"): counts,
+            DayModelKey(day: "2026-08-04", model: "claude-fable-5"): counts,
+            DayModelKey(day: "2026-08-05", model: "claude-opus-5"): counts,
+        ]
+        let segments = UsageAggregator.dayFamilyTotals(totals)
+        XCTAssertEqual(segments.map(\.day),
+                       ["2026-08-04", "2026-08-04", "2026-08-05", "2026-08-05", "2026-08-05"])
+        XCTAssertEqual(segments.map(\.family),
+                       ["fable", "opus", "fable", "opus", "sonnet"])
+    }
+
+    func testDayFamilyTotalsKeepsEmptyCalendarDays() {
+        var counts = TokenCounts()
+        counts.input = 1
+        let totals: [DayModelKey: TokenCounts] = [
+            DayModelKey(day: "2026-08-20", model: "claude-fable-5"): counts,
+            DayModelKey(day: "2026-08-26", model: "claude-opus-5"): counts,
+        ]
+        let days = ["2026-08-20", "2026-08-21", "2026-08-22", "2026-08-23",
+                    "2026-08-24", "2026-08-25", "2026-08-26"]
+        let segments = UsageAggregator.dayFamilyTotals(totals, days: days)
+        XCTAssertEqual(Set(segments.map(\.day)).sorted(), days)
+        XCTAssertEqual(segments.first { $0.day == "2026-08-24" }?.tokens, 0)
+        XCTAssertEqual(segments.first { $0.day == "2026-08-20" }?.tokens, 1)
+        XCTAssertEqual(segments.first { $0.day == "2026-08-20" }?.family, "fable")
+        XCTAssertEqual(segments.first { $0.day == "2026-08-26" }?.family, "opus")
+    }
+
+    func testDayFamilyTotalsEmptyHistoryStaysEmpty() {
+        let days = ["2026-08-20", "2026-08-21"]
+        XCTAssertEqual(UsageAggregator.dayFamilyTotals([:], days: days), [])
+    }
+
+    func testDayFamilyTotalsMergesModelsOfTheSameFamily() {
+        var ten = TokenCounts()
+        ten.input = 10
+        var one = TokenCounts()
+        one.input = 1
+        let totals: [DayModelKey: TokenCounts] = [
+            DayModelKey(day: "2026-08-04", model: "claude-opus-5"): ten,
+            DayModelKey(day: "2026-08-04", model: "claude-opus-4-8"): one,
+        ]
+        let segments = UsageAggregator.dayFamilyTotals(totals)
+        XCTAssertEqual(segments.count, 1)
+        XCTAssertEqual(segments.first?.family, "opus")
+        XCTAssertEqual(segments.first?.tokens, 11)
+    }
+
     func testDayKeyUsesTimeZone() {
         let date = DateParsing.parse("2026-08-01T23:30:00Z")!
         XCTAssertEqual(UsageAggregator.dayKey(for: date, timeZone: TimeZone(identifier: "UTC")!), "2026-08-01")
         XCTAssertEqual(UsageAggregator.dayKey(for: date, timeZone: TimeZone(identifier: "Asia/Tokyo")!), "2026-08-02")
+    }
+
+    func testLastSevenDaysAreCalendarDaysIncludingToday() {
+        let now = DateParsing.parse("2026-08-26T15:00:00Z")!
+        XCTAssertEqual(
+            UsageAggregator.lastSevenDays(endingOn: now, timeZone: utc),
+            ["2026-08-20", "2026-08-21", "2026-08-22", "2026-08-23",
+             "2026-08-24", "2026-08-25", "2026-08-26"])
+    }
+
+    /// 6 × 86400 seconds back from 00:30 after a spring-forward lands on the
+    /// previous calendar day; the window must still be seven local dates.
+    func testLastSevenDaysUsesCalendarDatesAcrossDST() {
+        let tz = TimeZone(identifier: "America/Los_Angeles")!
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = tz
+        let now = cal.date(from: DateComponents(year: 2026, month: 3, day: 14, hour: 0, minute: 30))!
+        XCTAssertEqual(
+            UsageAggregator.lastSevenDays(endingOn: now, timeZone: tz),
+            ["2026-03-08", "2026-03-09", "2026-03-10", "2026-03-11",
+             "2026-03-12", "2026-03-13", "2026-03-14"])
     }
 }

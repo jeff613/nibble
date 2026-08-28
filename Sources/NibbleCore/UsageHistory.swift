@@ -60,6 +60,25 @@ public struct TokenCounts: Equatable, Sendable {
         cacheCreation += e.cacheCreation
         cacheRead += e.cacheRead
     }
+
+    public mutating func add(_ other: TokenCounts) {
+        input += other.input
+        output += other.output
+        cacheCreation += other.cacheCreation
+        cacheRead += other.cacheRead
+    }
+}
+
+public enum HistoryMerge {
+    public static func union(_ parts: [[DayModelKey: TokenCounts]]) -> [DayModelKey: TokenCounts] {
+        var out: [DayModelKey: TokenCounts] = [:]
+        for part in parts {
+            for (key, counts) in part {
+                out[key, default: TokenCounts()].add(counts)
+            }
+        }
+        return out
+    }
 }
 
 /// One stacked-bar segment: a family's token total for one day.

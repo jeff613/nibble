@@ -94,6 +94,19 @@ final class UsageHistoryTests: XCTestCase {
         XCTAssertEqual(UsageAggregator.dayKey(for: date, timeZone: TimeZone(identifier: "Asia/Tokyo")!), "2026-08-02")
     }
 
+    func testHistoryMergeUnionsOverlappingDays() {
+        var a = TokenCounts(); a.input = 1
+        var b = TokenCounts(); b.output = 2
+        let left = [DayModelKey(day: "2026-08-01", model: "opus-5"): a]
+        let right = [
+            DayModelKey(day: "2026-08-01", model: "opus-5"): b,
+            DayModelKey(day: "2026-08-01", model: "grok-4.6"): b,
+        ]
+        let merged = HistoryMerge.union([left, right])
+        XCTAssertEqual(merged[DayModelKey(day: "2026-08-01", model: "opus-5")]?.total, 3)
+        XCTAssertEqual(merged[DayModelKey(day: "2026-08-01", model: "grok-4.6")]?.output, 2)
+    }
+
     func testLastSevenDaysAreCalendarDaysIncludingToday() {
         let now = DateParsing.parse("2026-08-26T15:00:00Z")!
         XCTAssertEqual(

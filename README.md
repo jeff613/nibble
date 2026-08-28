@@ -83,8 +83,8 @@ more honest of the two.
 
 | Data | Source |
 |---|---|
-| Live quota percentages and reset times | `GET https://api.anthropic.com/api/oauth/usage`, authenticated with your Claude Code login |
-| 7-day token history and cost estimate | Your local Claude Code logs in `~/.claude/projects/**/*.jsonl` — read-only, never uploaded |
+| Live quota percentages and reset times | Claude: `GET https://api.anthropic.com/api/oauth/usage`. Optional Codex and Grok logins from the panel `⋯` menu use the same usage endpoints those CLIs already poll. |
+| 7-day token history and cost estimate | Local logs: `~/.claude/projects/**/*.jsonl`, `~/.codex/sessions/**/rollout-*.jsonl`, `~/.grok/sessions/**/updates.jsonl`. Read-only, never uploaded. |
 
 If you have Claude Code signed in but rarely use it, the quota gauges still work; the
 history chart will just be empty.
@@ -114,18 +114,19 @@ re-trip it.
 
 ### Model colours
 
-Each model family has a fixed colour so the chart reads the same every launch:
-Fable orange, Opus blue, Sonnet green, Mythos purple, Haiku pink, anything else grey.
-They're pinned in `ModelPalette` rather than left to Swift Charts, which assigns colours
-by category position — that would repaint Opus a different colour on any week where
-Fable happened not to appear.
+Each short model name has a fixed colour so the chart reads the same every launch
+(`opus-5`, `gpt-5.6-sol`, `grok-4.6`, …). They're pinned in `ModelPalette` rather
+than left to Swift Charts, which assigns colours by category position.
 
 ## Caveats
 
-**The usage endpoint is not a public, documented API.** It is the internal endpoint
-Claude Code itself uses to render `/usage`. Anthropic can change or remove it without
-notice, and if they do, this app will need updating. Treat Nibble as a convenience,
-not something to depend on.
+**The usage endpoints are not public, documented APIs.** Claude's is the internal
+endpoint Claude Code uses to render `/usage`. Codex uses ChatGPT's `wham/usage`
+route; Grok uses Grok Build billing. Vendors can change or remove them without
+notice. Treat Nibble as a convenience, not something to depend on.
+
+The menu bar shows one provider at a time (Claude by default). Pick another from
+**Menu bar** at the bottom of the panel after connecting Codex or Grok.
 
 The cost figure is an *estimate* of what your logged usage would have cost at published
 API list prices. It is not a bill, it does not reflect what you actually pay for your

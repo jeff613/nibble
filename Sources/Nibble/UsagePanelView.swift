@@ -77,31 +77,28 @@ struct SetupView: View {
 
 struct DashboardView: View {
     @ObservedObject var state: AppState
+    @State private var menuError: String?
+
+    var connected: [Provider] {
+        Provider.allCases.filter { state.connected.contains($0) }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Claude Usage").font(.headline)
+            Text("Usage").font(.headline)
 
-            if let hint = state.errorHint {
-                Label(hint, systemImage: "exclamationmark.triangle")
+            if let menuError {
+                Label(menuError, systemImage: "exclamationmark.triangle")
                     .font(.caption)
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(.red)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
             // Countdowns tick every second regardless of polling.
             TimelineView(.periodic(from: .now, by: 1)) { context in
-                VStack(alignment: .leading, spacing: 10) {
-                    if let until = state.backoffUntil, until > context.date {
-                        Label(
-                            "Rate limited by Anthropic — resuming in \(Formatting.duration(until.timeIntervalSince(context.date))). Numbers below may be stale.",
-                            systemImage: "clock.badge.exclamationmark")
-                            .font(.caption)
-                            .foregroundStyle(.orange)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    ForEach(Formatting.sorted(state.windows), id: \.kind) { window in
-                        GaugeRow(window: window, now: context.date)
+                VStack(alignment: .leading, spacing: 12) {
+                    ForEach(connected, id: \.self) { provider in
+                        providerSection(provider, now: context.date)
                     }
                 }
             }
@@ -128,8 +125,33 @@ struct DashboardView: View {
             HStack {
                 LaunchAtLoginToggle()
                 Spacer()
+                Picker("Menu bar", selection: $state.selectedBarProvider) {
+                    ForEach(connected, id: \.self) { provider in
+                        Text(provider.displayName).tag(provider)
+                    }
+                }
+                .pickerStyle(.menu)
+                .fixedSize()
                 Menu {
-                    Button("Disconnect") { state.disconnect() }
+                    if state.codexLoginPresent && !state.connected.contains(.codex) {
+                        Button("Use my Codex login") {
+                            Task { menuError = await state.connectCodex() }
+                        }
+                    }
+                    if state.grokLoginPresent && !state.connected.contains(.grok) {
+                        Button("Use my Grok login") {
+                            Task { menuError = await state.connectGrok() }
+                        }
+                    }
+                    if state.connected.contains(.codex) {
+                        Button("Disconnect Codex") { state.disconnect(.codex) }
+                    }
+                    if state.connected.contains(.grok) {
+                        Button("Disconnect Grok") { state.disconnect(.grok) }
+                    }
+                    if state.connected.contains(.claude) {
+                        Button("Disconnect Claude") { state.disconnect(.claude) }
+                    }
                     Button("Quit Nibble") { NSApp.terminate(nil) }
                 } label: {
                     Image(systemName: "ellipsis.circle")
@@ -139,6 +161,30 @@ struct DashboardView: View {
             }
         }
         .padding(16)
+    }
+
+    @ViewBuilder
+    private func providerSection(_ provider: Provider, now: Date) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(provider.displayName).font(.subheadline).bold()
+            if let until = state.backoff[provider], until > now {
+                Label(
+                    "Rate limited, resuming in \(Formatting.duration(until.timeIntervalSince(now))). Numbers below may be stale.",
+                    systemImage: "clock.badge.exclamationmark")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if let hint = state.hints[provider] {
+                Label(hint, systemImage: "exclamationmark.triangle")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            ForEach(Formatting.sorted(state.windowsByProvider[provider] ?? []), id: \.kind) { window in
+                GaugeRow(window: window, now: now)
+            }
+        }
     }
 }
 

@@ -17,11 +17,16 @@ public enum Pricing {
         ("opus", ModelPricing(inputPerMTok: 5, outputPerMTok: 25)),
         ("sonnet", ModelPricing(inputPerMTok: 3, outputPerMTok: 15)),
         ("haiku", ModelPricing(inputPerMTok: 1, outputPerMTok: 5)),
+        // API list price, not a bill.
+        ("gpt-5.6", ModelPricing(inputPerMTok: 1.25, outputPerMTok: 10)),
+        ("gpt-5", ModelPricing(inputPerMTok: 1.25, outputPerMTok: 10)),
+        ("grok-4.6", ModelPricing(inputPerMTok: 3, outputPerMTok: 15)),
+        ("grok-4", ModelPricing(inputPerMTok: 3, outputPerMTok: 15)),
     ]
 
     public static func pricing(forModel id: String) -> ModelPricing? {
-        guard id.hasPrefix("claude") else { return nil }
-        return tiers.first { id.contains($0.needle) }?.pricing
+        let lower = id.lowercased()
+        return tiers.first { lower.contains($0.needle) }?.pricing
     }
 
     public static func cost(_ c: TokenCounts, model: String) -> Double? {

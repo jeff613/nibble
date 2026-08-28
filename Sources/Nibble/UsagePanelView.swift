@@ -200,7 +200,7 @@ struct WeekChart: View {
     /// Only the families on screen, in canonical order — colours come from the
     /// fixed palette, never from the chart's positional defaults.
     var scale: (domain: [String], range: [Color]) {
-        let domain = ModelPalette.presentFamilies(in: history.keys.map(\.model))
+        let domain = ModelPalette.present(in: history.keys.map(\.model))
         return (domain, domain.map { Color(hex: ModelPalette.hex(for: $0)) })
     }
 

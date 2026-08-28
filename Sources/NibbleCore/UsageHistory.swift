@@ -82,22 +82,23 @@ public enum UsageAggregator {
                                        days: [String] = []) -> [DayFamilyTotal] {
         var merged: [DayModelKey: Int] = [:]
         for (key, counts) in totals {
-            let family = DayModelKey(day: key.day, model: ModelPalette.family(for: key.model))
-            merged[family, default: 0] += counts.total
+            let name = DayModelKey(day: key.day, model: ModelPalette.shortName(for: key.model))
+            merged[name, default: 0] += counts.total
         }
         var segments = merged
             .map { DayFamilyTotal(day: $0.key.day, family: $0.key.model, tokens: $0.value) }
         if !segments.isEmpty, !days.isEmpty {
             let present = Set(segments.map(\.day))
-            let families = Set(segments.map(\.family))
-            let family = ModelPalette.families.first(where: families.contains) ?? "other"
+            let names = Set(segments.map(\.family))
+            let family = names.min { ModelPalette.legendIndex(of: $0) < ModelPalette.legendIndex(of: $1) }
+                ?? "other"
             for day in days where !present.contains(day) {
                 segments.append(DayFamilyTotal(day: day, family: family, tokens: 0))
             }
         }
         return segments.sorted {
-            ($0.day, ModelPalette.families.firstIndex(of: $0.family) ?? .max)
-                < ($1.day, ModelPalette.families.firstIndex(of: $1.family) ?? .max)
+            ($0.day, ModelPalette.legendIndex(of: $0.family), $0.family)
+                < ($1.day, ModelPalette.legendIndex(of: $1.family), $1.family)
         }
     }
 

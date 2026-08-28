@@ -49,7 +49,7 @@ final class UsageHistoryTests: XCTestCase {
         XCTAssertEqual(segments.map(\.day),
                        ["2026-08-04", "2026-08-04", "2026-08-05", "2026-08-05", "2026-08-05"])
         XCTAssertEqual(segments.map(\.family),
-                       ["fable", "opus", "fable", "opus", "sonnet"])
+                       ["fable-5", "opus-5", "fable-5", "opus-5", "sonnet-5"])
     }
 
     func testDayFamilyTotalsKeepsEmptyCalendarDays() {
@@ -65,8 +65,8 @@ final class UsageHistoryTests: XCTestCase {
         XCTAssertEqual(Set(segments.map(\.day)).sorted(), days)
         XCTAssertEqual(segments.first { $0.day == "2026-08-24" }?.tokens, 0)
         XCTAssertEqual(segments.first { $0.day == "2026-08-20" }?.tokens, 1)
-        XCTAssertEqual(segments.first { $0.day == "2026-08-20" }?.family, "fable")
-        XCTAssertEqual(segments.first { $0.day == "2026-08-26" }?.family, "opus")
+        XCTAssertEqual(segments.first { $0.day == "2026-08-20" }?.family, "fable-5")
+        XCTAssertEqual(segments.first { $0.day == "2026-08-26" }?.family, "opus-5")
     }
 
     func testDayFamilyTotalsEmptyHistoryStaysEmpty() {
@@ -74,7 +74,7 @@ final class UsageHistoryTests: XCTestCase {
         XCTAssertEqual(UsageAggregator.dayFamilyTotals([:], days: days), [])
     }
 
-    func testDayFamilyTotalsMergesModelsOfTheSameFamily() {
+    func testDayFamilyTotalsKeepsVersionedModelsApart() {
         var ten = TokenCounts()
         ten.input = 10
         var one = TokenCounts()
@@ -84,9 +84,8 @@ final class UsageHistoryTests: XCTestCase {
             DayModelKey(day: "2026-08-04", model: "claude-opus-4-8"): one,
         ]
         let segments = UsageAggregator.dayFamilyTotals(totals)
-        XCTAssertEqual(segments.count, 1)
-        XCTAssertEqual(segments.first?.family, "opus")
-        XCTAssertEqual(segments.first?.tokens, 11)
+        XCTAssertEqual(segments.map(\.family), ["opus-4-8", "opus-5"])
+        XCTAssertEqual(segments.map(\.tokens), [1, 10])
     }
 
     func testDayKeyUsesTimeZone() {

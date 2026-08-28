@@ -151,6 +151,9 @@ struct GaugeRow: View {
         case "session": return "Session (5h)"
         case "weekly_all": return "Weekly · all models"
         case "weekly_scoped": return "Weekly · \(window.modelName ?? "model")"
+        case "weekly": return "Weekly"
+        case "monthly": return "Monthly"
+        case "credits": return "Credits"
         default: return window.kind
         }
     }

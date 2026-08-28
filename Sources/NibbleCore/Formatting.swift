@@ -6,7 +6,10 @@ public enum Severity: Int, Comparable, Sendable {
 }
 
 public enum Formatting {
-    static let kindOrder = ["session": 0, "weekly_all": 1, "weekly_scoped": 2]
+    static let kindOrder = [
+        "session": 0, "weekly_all": 1, "weekly_scoped": 2,
+        "weekly": 3, "monthly": 4, "credits": 5,
+    ]
 
     public static func sorted(_ windows: [LimitWindow]) -> [LimitWindow] {
         windows.sorted { (kindOrder[$0.kind] ?? 99) < (kindOrder[$1.kind] ?? 99) }
@@ -15,8 +18,10 @@ public enum Formatting {
     public static func shortLabel(_ w: LimitWindow) -> String {
         switch w.kind {
         case "session": return "5h"
-        case "weekly_all": return "wk"
+        case "weekly_all", "weekly": return "wk"
         case "weekly_scoped": return w.modelName.map { String($0.prefix(1)) } ?? "m"
+        case "monthly": return "mo"
+        case "credits": return "cr"
         default: return String(w.kind.prefix(2))
         }
     }

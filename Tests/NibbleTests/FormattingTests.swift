@@ -21,6 +21,35 @@ final class FormattingTests: XCTestCase {
         XCTAssertEqual(Formatting.barText(w), "mo 10%")
     }
 
+    func testCodexBarText() {
+        let windows = [
+            LimitWindow(kind: "weekly", percent: 40),
+            LimitWindow(kind: "session", percent: 12),
+        ]
+        XCTAssertEqual(Formatting.barText(windows), "5h 12% · wk 40%")
+    }
+
+    func testCodexBarTextWithCredits() {
+        let windows = [
+            LimitWindow(kind: "session", percent: 12),
+            LimitWindow(kind: "weekly", percent: 40),
+            LimitWindow(kind: "credits", percent: 10),
+        ]
+        XCTAssertEqual(Formatting.barText(windows), "5h 12% · wk 40% · cr 10%")
+    }
+
+    func testGrokWeeklyBarText() {
+        XCTAssertEqual(
+            Formatting.barText([LimitWindow(kind: "weekly", percent: 61)]),
+            "wk 61%")
+    }
+
+    func testGrokMonthlyBarText() {
+        XCTAssertEqual(
+            Formatting.barText([LimitWindow(kind: "monthly", percent: 61)]),
+            "mo 61%")
+    }
+
     func testSeverityThresholds() {
         XCTAssertEqual(Formatting.severity([LimitWindow(kind: "session", percent: 50)]), .normal)
         XCTAssertEqual(Formatting.severity([LimitWindow(kind: "session", percent: 75)]), .warning)

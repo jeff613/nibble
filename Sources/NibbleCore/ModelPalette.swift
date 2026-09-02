@@ -14,7 +14,7 @@ public enum ModelPalette {
         "fable-5": "E8833A",
         "opus": "3B82F6",
         "opus-5": "3B82F6",
-        "opus-4-8": "3B82F6",
+        "opus-4-8": "8B5CF6",
         "sonnet": "22A06B",
         "sonnet-5": "22A06B",
         "sonnet-4-5": "22A06B",
@@ -22,14 +22,16 @@ public enum ModelPalette {
         "mythos-5": "A855F7",
         "haiku": "EC4899",
         "haiku-4-5": "EC4899",
-        "gpt-5.6-sol": "10A37F",
-        "gpt-5.6-terra": "10A37F",
-        "gpt-5.6-luna": "10A37F",
-        "gpt-5.6": "10A37F",
-        "gpt-5": "10A37F",
-        "grok-4.6": "1DA1F2",
-        "grok-4.5": "1DA1F2",
-        "grok-4": "1DA1F2",
+        "gpt-5.6-sol": "DC2626",
+        "gpt-5.6-terra": "DB2777",
+        "gpt-5.6-luna": "CA8A04",
+        "gpt-5.6": "7C3AED",
+        "gpt-5.5": "0D9488",
+        "gpt-5.4": "C026D3",
+        "gpt-5": "475569",
+        "grok-4.6": "06B6D4",
+        "grok-4.5": "0EA5E9",
+        "grok-4": "0284C7",
         "other": "8A8A8E",
     ]
 
@@ -60,12 +62,6 @@ public enum ModelPalette {
 
     public static func hex(for name: String) -> String {
         if let pinned = hexes[name] { return pinned }
-        for family in families where family != "other"
-            && (name == family || name.hasPrefix(family + "-")) {
-            return hexes[family]!
-        }
-        if name.hasPrefix("gpt") { return "10A37F" }
-        if name.hasPrefix("grok") { return "1DA1F2" }
         let sum = name.utf8.reduce(0) { ($0 &+ Int($1)) }
         return hashPalette[abs(sum) % hashPalette.count]
     }

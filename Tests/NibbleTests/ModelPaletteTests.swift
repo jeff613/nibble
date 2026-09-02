@@ -17,9 +17,14 @@ final class ModelPaletteTests: XCTestCase {
         XCTAssertNotEqual(ModelPalette.hex(for: a), ModelPalette.hex(for: b))
     }
 
-    func testOpusColourDoesNotDependOnWhoElseIsPresent() {
+    func testVersionedOpusModelsHaveDistinctColours() {
         XCTAssertEqual(ModelPalette.hex(for: ModelPalette.shortName(for: "claude-opus-5")), "3B82F6")
-        XCTAssertEqual(ModelPalette.hex(for: "opus-5"), ModelPalette.hex(for: "opus-4-8"))
+        XCTAssertEqual(ModelPalette.hex(for: "opus-4-8"), "8B5CF6")
+    }
+
+    func testCommonChartModelsHaveDistinctColours() {
+        let names = ["fable-5", "opus-5", "opus-4-8", "sonnet-5", "gpt-5.6-sol", "grok-4.6"]
+        XCTAssertEqual(Set(names.map(ModelPalette.hex(for:))).count, names.count)
     }
 
     func testPresentOrdersClaudeThenGptThenGrok() {
@@ -33,8 +38,8 @@ final class ModelPaletteTests: XCTestCase {
         XCTAssertEqual(ModelPalette.hex(for: "fable-5"), "E8833A")
         XCTAssertEqual(ModelPalette.hex(for: "opus-5"), "3B82F6")
         XCTAssertEqual(ModelPalette.hex(for: "sonnet-5"), "22A06B")
-        XCTAssertEqual(ModelPalette.hex(for: "gpt-5.6-sol"), "10A37F")
-        XCTAssertEqual(ModelPalette.hex(for: "grok-4.6"), "1DA1F2")
+        XCTAssertEqual(ModelPalette.hex(for: "gpt-5.6-sol"), "DC2626")
+        XCTAssertEqual(ModelPalette.hex(for: "grok-4.6"), "06B6D4")
     }
 
     func testPresentDeduplicatesShortNames() {

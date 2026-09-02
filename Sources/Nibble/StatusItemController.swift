@@ -26,17 +26,19 @@ final class StatusItemController {
             statusItem.button?.imagePosition = .imageLeading
         }
 
-        state.$windows.combineLatest(state.$needsSetup)
+        state.$windows.combineLatest(state.$needsSetup, state.$selectedBarProvider)
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] windows, needsSetup in self?.render(windows, needsSetup: needsSetup) }
+            .sink { [weak self] windows, needsSetup, provider in
+                self?.render(windows, needsSetup: needsSetup, provider: provider)
+            }
             .store(in: &cancellables)
 
-        render(state.windows, needsSetup: state.needsSetup)
+        render(state.windows, needsSetup: state.needsSetup, provider: state.selectedBarProvider)
     }
 
-    private func render(_ windows: [LimitWindow], needsSetup: Bool) {
+    private func render(_ windows: [LimitWindow], needsSetup: Bool, provider: Provider) {
         let hasIcon = statusItem.button?.image != nil
-        let label = needsSetup ? "Connect" : Formatting.barText(windows)
+        let label = needsSetup ? "Connect" : Formatting.barText(windows, provider: provider)
         let text = hasIcon ? " \(label)" : "🍪 \(label)"
         let color: NSColor
         switch Formatting.severity(windows) {

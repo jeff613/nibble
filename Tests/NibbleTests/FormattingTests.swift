@@ -12,6 +12,19 @@ final class FormattingTests: XCTestCase {
         XCTAssertEqual(Formatting.barText(windows), "5h 88% · wk 75% · F 81%")
     }
 
+    func testBarTextPrefixesProvider() {
+        XCTAssertEqual(
+            Formatting.barText(windows, provider: .claude),
+            "claude 5h 88% · wk 75% · F 81%")
+        XCTAssertEqual(
+            Formatting.barText([LimitWindow(kind: "weekly", percent: 61)], provider: .grok),
+            "grok wk 61%")
+        XCTAssertEqual(
+            Formatting.barText([LimitWindow(kind: "session", percent: 12),
+                                LimitWindow(kind: "weekly", percent: 40)], provider: .codex),
+            "gpt 5h 12% · wk 40%")
+    }
+
     func testBarTextEmpty() {
         XCTAssertEqual(Formatting.barText([]), "—")
     }

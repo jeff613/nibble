@@ -11,6 +11,16 @@ public enum Provider: String, CaseIterable, Sendable {
         }
     }
 
+    /// Compact status-item prefix. Codex is labeled `gpt` because that is the
+    /// model family the quota belongs to.
+    public var barLabel: String {
+        switch self {
+        case .claude: return "claude"
+        case .codex: return "gpt"
+        case .grok: return "grok"
+        }
+    }
+
     public var consentKey: String {
         switch self {
         case .claude: return "hasConnectedClaudeCodeLogin"

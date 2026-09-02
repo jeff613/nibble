@@ -26,11 +26,17 @@ public enum Formatting {
         }
     }
 
-    public static func barText(_ windows: [LimitWindow]) -> String {
-        guard !windows.isEmpty else { return "—" }
-        return sorted(windows)
-            .map { "\(shortLabel($0)) \(Int($0.percent.rounded()))%" }
-            .joined(separator: " · ")
+    public static func barText(_ windows: [LimitWindow], provider: Provider? = nil) -> String {
+        let body: String
+        if windows.isEmpty {
+            body = "—"
+        } else {
+            body = sorted(windows)
+                .map { "\(shortLabel($0)) \(Int($0.percent.rounded()))%" }
+                .joined(separator: " · ")
+        }
+        guard let provider else { return body }
+        return "\(provider.barLabel) \(body)"
     }
 
     public static func severity(_ windows: [LimitWindow]) -> Severity {

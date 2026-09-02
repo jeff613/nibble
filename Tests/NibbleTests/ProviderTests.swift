@@ -8,6 +8,12 @@ final class ProviderTests: XCTestCase {
         XCTAssertEqual(Provider.grok.displayName, "Grok")
     }
 
+    func testBarLabels() {
+        XCTAssertEqual(Provider.claude.barLabel, "claude")
+        XCTAssertEqual(Provider.codex.barLabel, "gpt")
+        XCTAssertEqual(Provider.grok.barLabel, "grok")
+    }
+
     func testFallbackKeepsSelectionWhenStillConnected() {
         XCTAssertEqual(
             Provider.fallback(selected: .codex, connected: [.claude, .codex]),

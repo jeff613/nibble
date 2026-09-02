@@ -21,6 +21,11 @@ final class UsageHistoryTests: XCTestCase {
         XCTAssertNil(UsageLineParser.parse(#"{"type":"assistant","timestamp":"2026-08-01T10:00:00Z","message":{"model":"m"}}"#))
     }
 
+    func testIgnoresSyntheticAssistantModels() {
+        let line = #"{"type":"assistant","timestamp":"2026-08-01T10:00:00Z","message":{"id":"synthetic","model":"<synthetic>","usage":{"input_tokens":10,"output_tokens":20}}}"#
+        XCTAssertNil(UsageLineParser.parse(line))
+    }
+
     func testFoldAggregatesAndDedupes() throws {
         let utc = TimeZone(identifier: "UTC")!
         let e = try XCTUnwrap(UsageLineParser.parse(assistantLine))

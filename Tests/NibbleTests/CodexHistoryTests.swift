@@ -30,12 +30,22 @@ final class CodexHistoryTests: XCTestCase {
         XCTAssertEqual(totals.values.first?.output, 20)
     }
 
-    func testUnknownModelWhenNoTurnContext() {
+    func testIgnoresTokenCountWithoutUserFacingTurnContext() {
         var model = "unknown"
         var totals: [DayModelKey: TokenCounts] = [:]
         var seen = Set<String>()
-        _ = CodexLineParser.consume(tokens, model: &model, into: &totals, seen: &seen, timeZone: utc)
-        XCTAssertNotNil(totals[DayModelKey(day: "2026-08-28", model: "unknown")])
+        XCTAssertEqual(CodexLineParser.consume(tokens, model: &model, into: &totals, seen: &seen, timeZone: utc), 0)
+        XCTAssertTrue(totals.isEmpty)
+    }
+
+    func testIgnoresAutomatedReviewModel() {
+        let review = #"{"timestamp":"2026-08-28T10:00:00Z","ordinal":1,"type":"turn_context","payload":{"model":"codex-auto-review"}}"#
+        var model = "unknown"
+        var totals: [DayModelKey: TokenCounts] = [:]
+        var seen = Set<String>()
+        _ = CodexLineParser.consume(review, model: &model, into: &totals, seen: &seen, timeZone: utc)
+        XCTAssertEqual(CodexLineParser.consume(tokens, model: &model, into: &totals, seen: &seen, timeZone: utc), 0)
+        XCTAssertTrue(totals.isEmpty)
     }
 
     func testScannerReadsRolloutFiles() throws {

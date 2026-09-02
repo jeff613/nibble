@@ -28,6 +28,7 @@ public enum GrokLineParser {
         let modelUsage = ((update["usage"] as? [String: Any])?["modelUsage"] as? [String: Any]) ?? [:]
         var accepted = 0
         for (model, raw) in modelUsage {
+            guard UsageModelFilter.isUserFacing(model) else { continue }
             guard let usage = raw as? [String: Any] else { continue }
             func count(_ key: String) -> Int { (usage[key] as? NSNumber)?.intValue ?? 0 }
             let key = DayModelKey(day: day, model: model)

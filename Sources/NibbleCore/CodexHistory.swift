@@ -19,6 +19,7 @@ public enum CodexLineParser {
         }
 
         guard type == "event_msg", payload["type"] as? String == "token_count" else { return 0 }
+        guard UsageModelFilter.isUserFacing(model) else { return 0 }
         let ts = root["timestamp"] as? String ?? ""
         let ordinal = (root["ordinal"] as? NSNumber)?.stringValue ?? ""
         let dedupe = "\(ts):\(ordinal)"

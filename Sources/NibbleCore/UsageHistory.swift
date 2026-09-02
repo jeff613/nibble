@@ -1,5 +1,14 @@
 import Foundation
 
+enum UsageModelFilter {
+    static func isUserFacing(_ modelID: String) -> Bool {
+        let id = modelID.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !id.isEmpty, id != "unknown" else { return false }
+        if id.hasPrefix("<"), id.hasSuffix(">") { return false }
+        return !id.hasPrefix("codex-auto-")
+    }
+}
+
 public struct UsageEvent: Equatable, Sendable {
     public var timestamp: Date
     public var model: String
@@ -20,6 +29,7 @@ public enum UsageLineParser {
               let usage = message["usage"] as? [String: Any] else { return nil }
 
         let model = message["model"] as? String ?? "unknown"
+        guard UsageModelFilter.isUserFacing(model) else { return nil }
         let messageID = message["id"] as? String
         let requestID = root["requestId"] as? String
         // Streamed chunks can repeat usage for the same message; key on both IDs.

@@ -25,16 +25,20 @@ struct SetupView: View {
     @State private var error: String?
     @State private var connecting = false
 
+    var hidden: [Provider] {
+        Provider.allCases.filter { state.isHidden($0) && state.loginPresent($0) }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Connect Nibble").font(.headline)
 
-            Text("Nibble reads the Claude login already stored on this Mac by Claude Code. Nothing is read until you click the button below.")
+            Text("Nibble looks for Claude Code, Codex, and Grok logins already stored on this Mac. Tokens are read live and never copied elsewhere.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
-            Text("The token is read fresh on each check and never copied elsewhere. Your quota data goes nowhere but this window.")
+            Text("Quota data goes nowhere but this window.")
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -46,13 +50,18 @@ struct SetupView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            Button(connecting ? "Connecting…" : "Use my Claude Code login") { connect() }
+            Button(connecting ? "Looking…" : "Look for CLI logins") { connect() }
                 .keyboardShortcut(.defaultAction)
                 .disabled(connecting)
                 .frame(maxWidth: .infinity)
 
+            ForEach(hidden, id: \.self) { provider in
+                Button("Show \(provider.displayName)") { state.show(provider) }
+                    .frame(maxWidth: .infinity)
+            }
+
             HStack {
-                Text("Requires Claude Code, signed in.")
+                Text("Requires claude, codex, or grok, signed in.")
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
                 Spacer()
@@ -67,7 +76,7 @@ struct SetupView: View {
         connecting = true
         error = nil
         Task {
-            error = await state.connect()
+            error = await state.lookForLogins()
             connecting = false
         }
     }
@@ -77,22 +86,18 @@ struct SetupView: View {
 
 struct DashboardView: View {
     @ObservedObject var state: AppState
-    @State private var menuError: String?
 
     var connected: [Provider] {
         Provider.allCases.filter { state.connected.contains($0) }
     }
 
+    var hidden: [Provider] {
+        Provider.allCases.filter { state.isHidden($0) && state.loginPresent($0) }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Usage").font(.headline)
-
-            if let menuError {
-                Label(menuError, systemImage: "exclamationmark.triangle")
-                    .font(.caption)
-                    .foregroundStyle(.red)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
 
             // Countdowns tick every second regardless of polling.
             TimelineView(.periodic(from: .now, by: 1)) { context in
@@ -133,24 +138,11 @@ struct DashboardView: View {
                 .pickerStyle(.menu)
                 .fixedSize()
                 Menu {
-                    if state.codexLoginPresent && !state.connected.contains(.codex) {
-                        Button("Use my Codex login") {
-                            Task { menuError = await state.connectCodex() }
-                        }
+                    ForEach(connected, id: \.self) { provider in
+                        Button("Hide \(provider.displayName)") { state.disconnect(provider) }
                     }
-                    if state.grokLoginPresent && !state.connected.contains(.grok) {
-                        Button("Use my Grok login") {
-                            Task { menuError = await state.connectGrok() }
-                        }
-                    }
-                    if state.connected.contains(.codex) {
-                        Button("Disconnect Codex") { state.disconnect(.codex) }
-                    }
-                    if state.connected.contains(.grok) {
-                        Button("Disconnect Grok") { state.disconnect(.grok) }
-                    }
-                    if state.connected.contains(.claude) {
-                        Button("Disconnect Claude") { state.disconnect(.claude) }
+                    ForEach(hidden, id: \.self) { provider in
+                        Button("Show \(provider.displayName)") { state.show(provider) }
                     }
                     Button("Quit Nibble") { NSApp.terminate(nil) }
                 } label: {
@@ -255,7 +247,7 @@ struct WeekChart: View {
 
     var body: some View {
         if bars.isEmpty {
-            Text("No local Claude Code logs found in ~/.claude/projects.")
+            Text("No local usage logs found for the visible providers.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .frame(height: 100)

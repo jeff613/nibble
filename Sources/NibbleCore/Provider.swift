@@ -21,13 +21,7 @@ public enum Provider: String, CaseIterable, Sendable {
         }
     }
 
-    public var consentKey: String {
-        switch self {
-        case .claude: return "hasConnectedClaudeCodeLogin"
-        case .codex: return "hasConnectedCodexLogin"
-        case .grok: return "hasConnectedGrokLogin"
-        }
-    }
+    public var optOutKey: String { "optOut.\(rawValue)" }
 
     public static func fallback(selected: Provider, connected: Set<Provider>) -> Provider? {
         if connected.contains(selected) { return selected }

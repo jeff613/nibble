@@ -17,6 +17,7 @@ final class AppState: ObservableObject {
     @Published var errorHint: String?
     @Published var hints: [Provider: String] = [:]
     @Published var needsSetup: Bool
+    @Published private(set) var connected: Set<Provider> = []
     @Published var selectedBarProvider: Provider = .claude {
         didSet {
             defaults.set(selectedBarProvider.rawValue, forKey: Self.selectedKey)
@@ -46,20 +47,12 @@ final class AppState: ObservableObject {
     private var inFlight: Set<Provider> = []
     private var historyByProvider: [Provider: [DayModelKey: TokenCounts]] = [:]
 
-    var connected: Set<Provider> {
-        Set(Provider.allCases.filter { defaults.bool(forKey: $0.consentKey) })
-    }
-
-    var codexLoginPresent: Bool {
-        FileManager.default.fileExists(atPath: CodexCredentials.defaultURL.path)
-    }
-
-    var grokLoginPresent: Bool {
-        FileManager.default.fileExists(atPath: GrokCredentials.defaultURL.path)
-    }
+    func loginPresent(_ provider: Provider) -> Bool { canRead(provider) }
+    func isHidden(_ provider: Provider) -> Bool { isOptedOut(provider) }
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
+        needsSetup = true
         let claudeCredentials = self.claudeCredentials
         claudeClient = ClaudeUsageClient { try claudeCredentials.readToken(reload: $0) }
         let home = FileManager.default.homeDirectoryForCurrentUser
@@ -76,7 +69,6 @@ final class AppState: ObservableObject {
         }
         grokScanner = GrokHistoryScanner(root: home.appendingPathComponent(".grok/sessions"))
 
-        needsSetup = Set(Provider.allCases.filter { defaults.bool(forKey: $0.consentKey) }).isEmpty
         if let raw = defaults.string(forKey: Self.selectedKey),
            let stored = Provider(rawValue: raw) {
             selectedBarProvider = stored
@@ -90,13 +82,35 @@ final class AppState: ObservableObject {
             }
         }
 
+        adoptAvailableProviders()
+        needsSetup = connected.isEmpty
         installWatchers()
         publishBar()
     }
 
     func start() {
-        for p in connected { refreshNow(provider: p) }
+        for p in connected {
+            rescanHistoryIfDue(provider: p, force: true)
+            refreshNow(provider: p)
+        }
         scheduleNextPoll()
+    }
+
+    /// Re-probe local CLI logins. Used by the empty setup screen.
+    func lookForLogins() async -> String? {
+        adoptAvailableProviders()
+        if connected.isEmpty {
+            return "No Claude Code, Codex, or Grok login found. Sign in with one of those CLIs, then try again."
+        }
+        needsSetup = false
+        installWatchers()
+        for p in connected {
+            rescanHistoryIfDue(provider: p, force: true)
+            refreshNow(provider: p, force: true)
+        }
+        publishBar()
+        scheduleNextPoll()
+        return nil
     }
 
     func refreshNow(force: Bool = false) {
@@ -114,67 +128,6 @@ final class AppState: ObservableObject {
         Task { await refresh(provider) }
     }
 
-    func connect() async -> String? {
-        do {
-            _ = try claudeCredentials.readToken()
-        } catch let error as ClaudeCodeCredentials.LookupError {
-            return error.errorDescription
-        } catch {
-            return error.localizedDescription
-        }
-
-        do {
-            lastFetch[.claude] = Date()
-            windowsByProvider[.claude] = try await claudeClient.fetchUsage()
-            defaults.set(true, forKey: Provider.claude.consentKey)
-            needsSetup = false
-            lastUpdated = Date()
-            hints[.claude] = nil
-            errorHint = nil
-            installWatchers()
-            rescanHistoryIfDue(provider: .claude, force: true)
-            publishBar()
-            scheduleNextPoll()
-            return nil
-        } catch UsageClientError.unauthorized {
-            return "Claude rejected that login. Run `claude` and sign in again."
-        } catch UsageClientError.rateLimited {
-            return "Anthropic is rate limiting this Mac right now. Wait a minute and try again."
-        } catch UsageClientError.badStatus(let code) {
-            return "Anthropic returned HTTP \(code)."
-        } catch {
-            return "Couldn't reach Anthropic. Check your connection."
-        }
-    }
-
-    func connectCodex() async -> String? {
-        await connectOptional(.codex) {
-            windowsByProvider[.codex] = try await codexClient.fetchUsage()
-        } unauthorized: {
-            "Codex rejected that login. Run `codex` and sign in again."
-        } rateLimited: {
-            "OpenAI is rate limiting this Mac right now. Wait a minute and try again."
-        } badStatus: { code in
-            "OpenAI returned HTTP \(code)."
-        } unreachable: {
-            "Couldn't reach OpenAI. Check your connection."
-        }
-    }
-
-    func connectGrok() async -> String? {
-        await connectOptional(.grok) {
-            windowsByProvider[.grok] = try await grokClient.fetchUsage()
-        } unauthorized: {
-            "Grok rejected that login. Run `grok` and sign in again."
-        } rateLimited: {
-            "xAI is rate limiting this Mac right now. Wait a minute and try again."
-        } badStatus: { code in
-            "xAI returned HTTP \(code)."
-        } unreachable: {
-            "Couldn't reach xAI. Check your connection."
-        }
-    }
-
     func panelOpened() {
         if accessDenied {
             accessDenied = false
@@ -186,8 +139,11 @@ final class AppState: ObservableObject {
         for p in connected { rescanHistoryIfDue(provider: p, force: true) }
     }
 
+    /// Hide a provider. Local CLI logins are left alone; Nibble just stops
+    /// reading them until `show` is called.
     func disconnect(_ provider: Provider) {
-        defaults.set(false, forKey: provider.consentKey)
+        defaults.set(true, forKey: provider.optOutKey)
+        connected.remove(provider)
         windowsByProvider[provider] = nil
         historyByProvider[provider] = nil
         hints[provider] = nil
@@ -203,46 +159,23 @@ final class AppState: ObservableObject {
             backoffUntil = nil
             return
         }
-        if let next = Provider.fallback(selected: selectedBarProvider, connected: connected) {
+        if let next = Provider.fallback(selected: selectedBarProvider, connected: connected),
+           next != selectedBarProvider {
             selectedBarProvider = next
         }
         publishBar()
     }
 
-    func disconnect() { disconnect(.claude) }
-
-    private func connectOptional(
-        _ provider: Provider,
-        fetch: () async throws -> Void,
-        unauthorized: () -> String,
-        rateLimited: () -> String,
-        badStatus: (Int) -> String,
-        unreachable: () -> String
-    ) async -> String? {
-        do {
-            try await fetch()
-            defaults.set(true, forKey: provider.consentKey)
-            lastFetch[provider] = Date()
-            lastUpdated = Date()
-            hints[provider] = nil
-            installWatchers()
-            rescanHistoryIfDue(provider: provider, force: true)
-            publishBar()
-            scheduleNextPoll()
-            return nil
-        } catch UsageClientError.unauthorized {
-            return unauthorized()
-        } catch UsageClientError.rateLimited {
-            return rateLimited()
-        } catch UsageClientError.badStatus(let code) {
-            return badStatus(code)
-        } catch CodexCredentials.LookupError.notSignedIn {
-            return "Can't find a Codex login on this Mac."
-        } catch GrokCredentials.LookupError.notSignedIn {
-            return "Can't find a Grok login on this Mac."
-        } catch {
-            return unreachable()
-        }
+    func show(_ provider: Provider) {
+        defaults.set(false, forKey: provider.optOutKey)
+        guard canRead(provider) else { return }
+        connected.insert(provider)
+        needsSetup = false
+        installWatchers()
+        rescanHistoryIfDue(provider: provider, force: true)
+        refreshNow(provider: provider, force: true)
+        publishBar()
+        scheduleNextPoll()
     }
 
     private func refresh(_ provider: Provider) async {
@@ -327,6 +260,41 @@ final class AppState: ObservableObject {
 
     private func rebuildHistory() {
         history = HistoryMerge.union(connected.map { historyByProvider[$0] ?? [:] })
+    }
+
+    private func adoptAvailableProviders() {
+        var next: Set<Provider> = []
+        for p in Provider.allCases where !isOptedOut(p) && canRead(p) {
+            next.insert(p)
+        }
+        connected = next
+        if let pick = Provider.fallback(selected: selectedBarProvider, connected: connected),
+           pick != selectedBarProvider {
+            selectedBarProvider = pick
+        }
+    }
+
+    private func isOptedOut(_ provider: Provider) -> Bool {
+        defaults.bool(forKey: provider.optOutKey)
+    }
+
+    private func canRead(_ provider: Provider) -> Bool {
+        switch provider {
+        case .claude:
+            do {
+                _ = try claudeCredentials.readToken()
+                return true
+            } catch ClaudeCodeCredentials.LookupError.accessDenied {
+                accessDenied = true
+                return false
+            } catch {
+                return false
+            }
+        case .codex:
+            return (try? CodexCredentials().readToken()) != nil
+        case .grok:
+            return (try? GrokCredentials().readToken()) != nil
+        }
     }
 
     private func installWatchers() {

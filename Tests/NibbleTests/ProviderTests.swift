@@ -14,6 +14,12 @@ final class ProviderTests: XCTestCase {
         XCTAssertEqual(Provider.grok.barLabel, "grok")
     }
 
+    func testOptOutKeysAreStable() {
+        XCTAssertEqual(Provider.claude.optOutKey, "optOut.claude")
+        XCTAssertEqual(Provider.codex.optOutKey, "optOut.codex")
+        XCTAssertEqual(Provider.grok.optOutKey, "optOut.grok")
+    }
+
     func testFallbackKeepsSelectionWhenStillConnected() {
         XCTAssertEqual(
             Provider.fallback(selected: .codex, connected: [.claude, .codex]),
@@ -28,11 +34,5 @@ final class ProviderTests: XCTestCase {
             Provider.fallback(selected: .claude, connected: [.grok]),
             .grok)
         XCTAssertNil(Provider.fallback(selected: .claude, connected: []))
-    }
-
-    func testConsentKeysAreStable() {
-        XCTAssertEqual(Provider.claude.consentKey, "hasConnectedClaudeCodeLogin")
-        XCTAssertEqual(Provider.codex.consentKey, "hasConnectedCodexLogin")
-        XCTAssertEqual(Provider.grok.consentKey, "hasConnectedGrokLogin")
     }
 }

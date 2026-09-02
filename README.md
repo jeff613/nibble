@@ -44,26 +44,24 @@ only have to do this once.
 
 ## Connecting your account
 
-Click the menu-bar item, then click **Use my Claude Code login** — the gauges fill in.
+If Claude Code, Codex, or Grok is already signed in on this Mac, Nibble picks that
+login up on launch. The menu bar shows a small `claude` / `gpt` / `grok` label so you
+can see which quota is on the bar; pick another from **Menu bar** in the panel.
 
 ### What this means, precisely
 
-Nibble reads the OAuth token that Claude Code has already stored on this machine — in
-your Keychain, or `~/.claude/.credentials.json`. That is the same credential Claude Code
-uses to render its own `/usage` output. The Keychain read goes through Apple's
-`security` tool, the same way Claude Code itself reads and writes the item, so there is
-no separate macOS approval prompt.
+Nibble reads the OAuth token each CLI already stored: Claude Code from the Keychain
+(or `~/.claude/.credentials.json`), Codex from `~/.codex/auth.json`, Grok from
+`~/.grok/auth.json`. The Claude Keychain read goes through Apple's `security` tool,
+the same way Claude Code itself reads the item.
 
-- **Nothing is read until you click that button.** That click is the consent gate, and
-  **Disconnect** withdraws it.
-- **The token is never copied.** It's read fresh on each check, so it stays valid as
-  Claude Code rotates it. The only thing Nibble persists is a boolean recording that
-  you connected.
-- **It goes nowhere but Anthropic.** The token is used for one request to
-  `api.anthropic.com` and is never logged, transmitted elsewhere, or written to disk.
+- **The token is never copied.** It's read fresh on each check and never written
+  elsewhere. Nibble persists app preferences and rate-limit backoff times, never tokens.
+- **It goes nowhere but that vendor.** Claude's token is used only for
+  `api.anthropic.com`, Codex's for ChatGPT usage, Grok's for Grok Build billing.
 
-**Disconnect** in the panel's `⋯` menu makes the app forget your consent and stop
-reading anything. To revoke the underlying login, run `claude auth logout`.
+**Hide** in the panel's `⋯` menu stops Nibble reading that login. The CLI stays signed
+in. **Show** turns it back on. To revoke the underlying login, use that CLI's logout.
 
 ### Why not a token you paste in yourself?
 

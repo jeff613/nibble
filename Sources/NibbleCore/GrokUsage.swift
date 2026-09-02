@@ -6,13 +6,13 @@ public enum GrokUsageParser {
             return []
         }
         let config = (root["config"] as? [String: Any]) ?? root
-        guard let percent = (config["creditUsagePercent"] as? NSNumber)?.doubleValue else {
-            return []
-        }
-        let period = config["currentPeriod"] as? [String: Any]
-        let type = (period?["type"] as? String) ?? ""
+        // The server drops creditUsagePercent while it is zero, so a period
+        // with no percent is 0% used, not "no data".
+        guard let period = config["currentPeriod"] as? [String: Any] else { return [] }
+        let percent = (config["creditUsagePercent"] as? NSNumber)?.doubleValue ?? 0
+        let type = (period["type"] as? String) ?? ""
         let kind = type.contains("MONTHLY") ? "monthly" : "weekly"
-        let resetsAt = (period?["end"] as? String).flatMap(DateParsing.parse)
+        let resetsAt = (period["end"] as? String).flatMap(DateParsing.parse)
         return [LimitWindow(kind: kind, percent: percent, resetsAt: resetsAt)]
     }
 }
